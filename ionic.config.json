@@ -1,0 +1,7 @@
+{
+  "name": "fuel-tracker-app",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
