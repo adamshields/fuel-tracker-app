@@ -68,3 +68,35 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+
+# Node
+node_modules/
+dist/
+www/
+
+# Capacitor & Ionic
+android/app/build/
+ios/App/App.xcworkspace/
+ios/App/Pods/
+ios/Pods/
+ios/Podfile.lock
+ios/build/
+ios/DerivedData/
+
+# Android build artifacts
+android/.gradle/
+android/.idea/
+android/local.properties
+android/captures/
+android/gradlew.bat
+android/gradlew
+android/gradle/wrapper/gradle-wrapper.jar
+android/gradle/wrapper/gradle-wrapper.properties
+
+# macOS / Windows cruft
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/

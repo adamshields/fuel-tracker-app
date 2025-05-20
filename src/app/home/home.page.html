@@ -1,4 +1,4 @@
-<ion-header [translucent]="true">
+<!-- <ion-header [translucent]="true">
   <ion-toolbar>
     <ion-title>
       Blank
@@ -17,4 +17,34 @@
     <strong>Ready to create an app?</strong>
     <p>Start with Ionic <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a></p>
   </div>
+</ion-content> -->
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Start New Trip</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-item>
+    <ion-label position="stacked">Center Tank (gal)</ion-label>
+    <ion-input type="number" [(ngModel)]="center"></ion-input>
+  </ion-item>
+
+  <ion-item>
+    <ion-label position="stacked">Port Saddle (gal)</ion-label>
+    <ion-input type="number" [(ngModel)]="port"></ion-input>
+  </ion-item>
+
+  <ion-item>
+    <ion-label position="stacked">Starboard Saddle (gal)</ion-label>
+    <ion-input type="number" [(ngModel)]="stbd"></ion-input>
+  </ion-item>
+
+  <ion-item>
+    <ion-label position="stacked">Notes</ion-label>
+    <ion-textarea [(ngModel)]="notes"></ion-textarea>
+  </ion-item>
+
+  <ion-button expand="full" (click)="saveTrip()">Save Trip</ion-button>
+  <ion-button expand="full" color="medium" [routerLink]="['/log']">View Trip Log</ion-button>
 </ion-content>
