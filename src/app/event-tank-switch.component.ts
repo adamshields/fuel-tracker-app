@@ -24,7 +24,7 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button [defaultHref]="'/trip-active/' + tripId"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <ion-icon name="swap-horizontal-outline"></ion-icon>
+          <!-- <ion-icon name="swap-horizontal-outline"></ion-icon> -->
           Tank Switch
         </ion-title>
       </ion-toolbar>

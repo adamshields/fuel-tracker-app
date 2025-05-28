@@ -24,7 +24,7 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button [defaultHref]="'/trip-details/' + tripId"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <ion-icon name="create-outline"></ion-icon>
+          <!-- <ion-icon name="create-outline"></ion-icon> -->
           Edit Event
         </ion-title>
         <ion-buttons slot="end">

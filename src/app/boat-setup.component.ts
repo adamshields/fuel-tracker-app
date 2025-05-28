@@ -21,7 +21,7 @@ import { BoatManagementService } from './boat-management.service';
     <ion-header>
       <ion-toolbar color="primary">
         <ion-title>
-          <ion-icon name="settings-outline"></ion-icon>
+          <!-- <ion-icon name="settings-outline"></ion-icon> -->
           Boat Configuration
         </ion-title>
         <ion-buttons slot="end">

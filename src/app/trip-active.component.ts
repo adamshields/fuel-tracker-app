@@ -24,7 +24,7 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button defaultHref="/dashboard"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <ion-icon name="navigate-circle-outline"></ion-icon>
+          <!-- <ion-icon name="navigate-circle-outline"></ion-icon> -->
           Active Trip
         </ion-title>
         <ion-buttons slot="end">
