@@ -300,4 +300,26 @@ export class TripManagementService {
   private generateId(): string {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
   }
+
+  async deleteTrip(tripId: string): Promise<void> {
+    const trips = await this.getTrips();
+    const tripIndex = trips.findIndex(t => t.id === tripId);
+    
+    if (tripIndex === -1) {
+      throw new Error('Trip not found');
+    }
+  
+    const trip = trips[tripIndex];
+    
+    // Prevent deletion of active trips
+    if (trip.status === 'active') {
+      throw new Error('Cannot delete an active trip. Complete or cancel the trip first.');
+    }
+  
+    // Remove the trip from the array
+    trips.splice(tripIndex, 1);
+    
+    // Save the updated trips array
+    await this.saveTrips(trips);
+  }
 }
