@@ -27,7 +27,7 @@ import { TripManagementService } from './trip-management.service';
           </ion-button>
         </ion-buttons>
         <ion-title>
-          <ion-icon name="list-outline"></ion-icon>
+          <!-- <ion-icon name="list-outline"></ion-icon> -->
           Trip Log
         </ion-title>
         <ion-buttons slot="end">

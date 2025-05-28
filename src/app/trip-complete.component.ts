@@ -26,7 +26,7 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button [defaultHref]="'/trip-active/' + tripId"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <ion-icon name="flag-outline"></ion-icon>
+          <!-- <ion-icon name="flag-outline"></ion-icon> -->
           Complete Trip
         </ion-title>
       </ion-toolbar>

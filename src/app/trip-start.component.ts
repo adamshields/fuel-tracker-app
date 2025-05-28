@@ -26,7 +26,7 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button defaultHref="/dashboard"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <ion-icon name="play-circle-outline"></ion-icon>
+          <!-- <ion-icon name="play-circle-outline"></ion-icon> -->
           Start Trip
         </ion-title>
       </ion-toolbar>
