@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { IonicModule, ToastController } from '@ionic/angular';
+import { IonicModule, ToastController, AlertController, ModalController } from '@ionic/angular';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { 
     IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
@@ -12,10 +12,17 @@ import {
 import { BoatConfig, Trip } from './boat.model';
 import { BoatManagementService } from './boat-management.service';
 import { TripManagementService } from './trip-management.service';
+import { HybridCameraService, GarminData } from './hybrid-camera.service';
+import { SimpleOCRService } from './simple-ocr.service';
 
 @Component({
   selector: 'app-event-tank-switch',
   standalone: true,
+  providers: [
+    ModalController, 
+    HybridCameraService,
+    SimpleOCRService
+  ],
   imports: [CommonModule, FormsModule, RouterModule, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonInput, IonTextarea, IonNote, IonCheckbox, IonChip, IonButton, IonList, IonIcon],
   template: `
     <ion-header>
@@ -91,6 +98,72 @@ import { TripManagementService } from './trip-management.service';
         </ion-card-content>
       </ion-card>
 
+      <!-- OCR Smart Scan -->
+      <ion-card *ngIf="!isLoading" color="primary">
+        <ion-card-header>
+          <ion-card-title color="light">
+            <ion-icon name="camera-outline"></ion-icon>
+            Smart OCR Scan
+          </ion-card-title>
+          <ion-card-subtitle color="light">Auto-read odometer & fuel from your Garmin screen</ion-card-subtitle>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-button 
+            expand="block" 
+            color="light"
+            [disabled]="isScanning"
+            (click)="scanGarminScreen()">
+            <ion-icon [name]="isScanning ? 'hourglass-outline' : 'camera-outline'" slot="start"></ion-icon>
+            {{ isScanning ? 'Processing OCR...' : 'Take Photo & Auto-Read' }}
+          </ion-button>
+          
+          <ion-button 
+            expand="block" 
+            fill="outline"
+            color="light"
+            [disabled]="isScanning"
+            (click)="testWithPhoto()"
+            class="ion-margin-top">
+            <ion-icon name="images-outline" slot="start"></ion-icon>
+            Test OCR with Saved Photo
+          </ion-button>
+
+          <ion-button 
+            expand="block" 
+            fill="outline"
+            color="light"
+            [disabled]="isScanning"
+            (click)="testOCROnly()"
+            class="ion-margin-top">
+            <ion-icon name="scan-outline" slot="start"></ion-icon>
+            Test OCR Only (Debug)
+          </ion-button>
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Show OCR Results -->
+      <ion-card *ngIf="lastOCRResult && !isLoading" [color]="getResultColor()">
+        <ion-card-header>
+          <ion-card-title [color]="lastOCRResult.confidence === 100 ? 'dark' : 'light'">
+            <ion-icon [name]="lastOCRResult.confidence === 100 ? 'person-outline' : 'scan-outline'"></ion-icon>
+            {{ lastOCRResult.confidence === 100 ? 'Manual Entry' : 'OCR Results' }}
+          </ion-card-title>
+          <ion-card-subtitle [color]="lastOCRResult.confidence === 100 ? 'dark' : 'light'">
+            {{ lastOCRResult.confidence }}% confidence • {{ lastOCRResult.processingTime }}ms
+            {{ lastOCRResult.ocrResult ? ' • OCR: ' + lastOCRResult.ocrResult.confidence + '%' : '' }}
+          </ion-card-subtitle>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-item [color]="getResultColor()" lines="none">
+            <ion-label [color]="lastOCRResult.confidence === 100 ? 'dark' : 'light'">
+              <h3>{{ lastOCRResult.confidence === 100 ? 'User entered:' : 'Auto-detected:' }}</h3>
+              <p>Odometer: {{ lastOCRResult.odometer || 'Not found' }} miles</p>
+              <p>Fuel: {{ lastOCRResult.totalFuel || 'Not found' }} gallons</p>
+            </ion-label>
+          </ion-item>
+        </ion-card-content>
+      </ion-card>
+
       <!-- Tank Switch Form -->
       <ion-card *ngIf="!isLoading">
         <ion-card-header>
@@ -111,6 +184,9 @@ import { TripManagementService } from './trip-management.service';
                 [(ngModel)]="currentOdometer"
                 [placeholder]="getLastOdometer().toString()">
               </ion-input>
+              <ion-note slot="helper">
+                {{ lastOCRResult?.odometer ? 'Auto-filled from scan' : 'Enter current odometer reading' }}
+              </ion-note>
             </ion-item>
 
             <ion-item>
@@ -121,7 +197,9 @@ import { TripManagementService } from './trip-management.service';
                 [(ngModel)]="garminTotalFuel"
                 [placeholder]="getLastGarminTotal().toString()">
               </ion-input>
-              <ion-note slot="helper">Enter total fuel reading from your Garmin</ion-note>
+              <ion-note slot="helper">
+                {{ lastOCRResult?.totalFuel ? 'Auto-filled from scan' : 'Enter total fuel reading from your Garmin' }}
+              </ion-note>
             </ion-item>
           </ion-list>
 
@@ -224,6 +302,10 @@ export class EventTankSwitchComponent implements OnInit {
   // Loading states
   isLoading = false;
   isLogging = false;
+  isScanning = false;
+  
+  // OCR results
+  lastOCRResult: GarminData | null = null;
   
   currentOdometer = 0;
   garminTotalFuel = 0;
@@ -235,7 +317,9 @@ export class EventTankSwitchComponent implements OnInit {
     private router: Router,
     private boatService: BoatManagementService,
     private tripService: TripManagementService,
-    private toastCtrl: ToastController
+    private toastCtrl: ToastController,
+    private alertCtrl: AlertController,
+    private hybridCamera: HybridCameraService
   ) {}
 
   async ngOnInit() {
@@ -269,6 +353,159 @@ export class EventTankSwitchComponent implements OnInit {
     }
   }
 
+  // OCR Methods
+  async scanGarminScreen() {
+    if (this.isScanning) return;
+    
+    this.isScanning = true;
+    try {
+      console.log('Starting OCR scan...');
+      
+      const result = await this.hybridCamera.captureAndProcess(true); // true = camera
+      
+      console.log('OCR scan completed:', result);
+      
+      // Auto-fill form with results
+      if (result.odometer && result.odometer > this.getLastOdometer()) {
+        this.currentOdometer = result.odometer;
+      }
+      if (result.totalFuel && result.totalFuel > 0) {
+        this.garminTotalFuel = result.totalFuel;
+      }
+      
+      this.lastOCRResult = result;
+      
+      if (result.confidence === 100) {
+        await this.showSuccessToast(`Values entered! Processing: ${result.processingTime}ms`);
+      } else {
+        await this.showSuccessToast(`OCR detected values! Confidence: ${result.confidence}% (${result.processingTime}ms)`);
+      }
+      
+    } catch (error) {
+      console.error('OCR scan failed:', error);
+      if (error instanceof Error && error.message !== 'User cancelled') {
+        await this.showErrorToast('OCR scan failed. Try again or enter manually.');
+      }
+    } finally {
+      this.isScanning = false;
+    }
+  }
+
+  async testWithPhoto() {
+    if (this.isScanning) return;
+    
+    this.isScanning = true;
+    try {
+      console.log('Testing OCR with saved photo...');
+      
+      const result = await this.hybridCamera.testWithPhoto();
+      
+      console.log('OCR test completed:', result);
+      
+      await this.showOCRResults(result);
+      
+    } catch (error) {
+      console.error('OCR test failed:', error);
+      if (error instanceof Error && error.message !== 'User cancelled') {
+        await this.showErrorToast('OCR test failed.');
+      }
+    } finally {
+      this.isScanning = false;
+    }
+  }
+
+  async testOCROnly() {
+    if (this.isScanning) return;
+    
+    this.isScanning = true;
+    try {
+      console.log('Testing OCR only (no modal)...');
+      
+      const result = await this.hybridCamera.testOCROnly();
+      
+      console.log('OCR only test completed:', result);
+      
+      const alert = await this.alertCtrl.create({
+        header: 'OCR Debug Results',
+        message: `
+          <div style="text-align: left;">
+            <strong>Processing Time:</strong> ${result.processingTime}ms<br>
+            <strong>Confidence:</strong> ${result.confidence}%<br><br>
+            
+            <strong>Extracted Values:</strong><br>
+            • Odometer: ${result.odometer || 'Not found'}<br>
+            • Fuel: ${result.totalFuel || 'Not found'} gal<br><br>
+            
+            <details>
+              <summary>Raw OCR Text</summary>
+              <pre style="font-size: 10px; background: #f5f5f5; padding: 8px; margin: 4px 0; white-space: pre-wrap; max-height: 150px; overflow-y: auto;">${result.rawText}</pre>
+            </details>
+          </div>
+        `,
+        buttons: ['Close']
+      });
+      
+      await alert.present();
+      
+    } catch (error) {
+      console.error('OCR only test failed:', error);
+      await this.showErrorToast('OCR debug test failed.');
+    } finally {
+      this.isScanning = false;
+    }
+  }
+
+  private async showOCRResults(result: GarminData) {
+    const alert = await this.alertCtrl.create({
+      header: 'Scan Results',
+      message: `
+        <div style="text-align: left;">
+          <strong>Processing Time:</strong> ${result.processingTime}ms<br>
+          <strong>Confidence:</strong> ${result.confidence}%<br>
+          ${result.ocrResult ? `<strong>OCR Confidence:</strong> ${result.ocrResult.confidence}%<br>` : ''}
+          <br>
+          
+          <strong>Detected Values:</strong><br>
+          • Odometer: ${result.odometer || 'Not found'}<br>
+          • Fuel: ${result.totalFuel || 'Not found'} gal<br><br>
+          
+          <details>
+            <summary>Raw Text (click to expand)</summary>
+            <pre style="font-size: 10px; background: #f5f5f5; padding: 8px; margin: 4px 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${result.rawText}</pre>
+          </details>
+        </div>
+      `,
+      buttons: [
+        {
+          text: 'Just Show Results',
+          role: 'cancel'
+        },
+        {
+          text: 'Use Values',
+          handler: () => {
+            if (result.odometer && result.odometer > this.getLastOdometer()) {
+              this.currentOdometer = result.odometer;
+            }
+            if (result.totalFuel && result.totalFuel > 0) {
+              this.garminTotalFuel = result.totalFuel;
+            }
+            this.lastOCRResult = result;
+          }
+        }
+      ]
+    });
+    
+    await alert.present();
+  }
+
+  getResultColor(): string {
+    if (!this.lastOCRResult) return 'medium';
+    if (this.lastOCRResult.confidence === 100) return 'success';
+    if (this.lastOCRResult.confidence > 50) return 'warning';
+    return 'danger';
+  }
+
+  // Existing Methods
   getLastOdometer(): number {
     if (!this.trip || this.trip.events.length === 0) return 0;
     const lastEvent = this.trip.events[this.trip.events.length - 1];
@@ -373,6 +610,7 @@ export class EventTankSwitchComponent implements OnInit {
     }
   }
 
+  // Toast Methods
   private async showSuccessToast(message: string) {
     const toast = await this.toastCtrl.create({
       message: message,
@@ -395,6 +633,16 @@ export class EventTankSwitchComponent implements OnInit {
           role: 'cancel'
         }
       ]
+    });
+    await toast.present();
+  }
+
+  private async showWarningToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 4000,
+      color: 'warning',
+      position: 'bottom'
     });
     await toast.present();
   }
