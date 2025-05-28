@@ -16,7 +16,7 @@ import { TripManagementService } from './trip-management.service';
 @Component({
   selector: 'app-trip-active',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonProgressBar, IonBadge, IonChip, IonNote, IonList, IonAvatar, IonThumbnail, IonItemDivider],
+  imports: [CommonModule, FormsModule, RouterModule, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonProgressBar, IonBadge, IonChip, IonNote, IonList,  IonItemDivider],
   template: `
     <ion-header>
       <ion-toolbar color="primary">
