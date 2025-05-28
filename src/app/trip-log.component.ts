@@ -31,7 +31,7 @@ import { TripManagementService } from './trip-management.service';
           Trip Log
         </ion-title>
         <ion-buttons slot="end">
-          <ion-button (click)="showFilterOptions()" fill="clear">
+          <ion-button (click)="showFilterOptions()" fill="clear" [disabled]="isLoading">
             <ion-icon name="funnel-outline" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
@@ -40,8 +40,21 @@ import { TripManagementService } from './trip-management.service';
 
     <ion-content>
 
+      <!-- Loading State -->
+      <ion-card *ngIf="isLoading" class="ion-margin">
+        <ion-card-content>
+          <ion-item lines="none">
+            <ion-icon name="hourglass-outline" slot="start" color="primary"></ion-icon>
+            <ion-label>
+              <h3>Loading Trip History...</h3>
+              <p>Please wait while we load your trips</p>
+            </ion-label>
+          </ion-item>
+        </ion-card-content>
+      </ion-card>
+
       <!-- Search and Filter Bar -->
-      <ion-card class="ion-margin">
+      <ion-card *ngIf="!isLoading" class="ion-margin">
         <ion-card-content>
           <ion-searchbar 
             [(ngModel)]="searchTerm"
@@ -70,7 +83,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Trip Statistics Summary -->
-      <ion-card *ngIf="tripStats" class="ion-margin">
+      <ion-card *ngIf="tripStats && !isLoading" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="analytics-outline"></ion-icon>
@@ -120,7 +133,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Active Trip Alert -->
-      <ion-card *ngIf="activeTrip" color="warning" class="ion-margin">
+      <ion-card *ngIf="activeTrip && !isLoading" color="warning" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="navigate-circle-outline"></ion-icon>
@@ -140,23 +153,24 @@ import { TripManagementService } from './trip-management.service';
           <ion-button 
             expand="block" 
             color="dark"
+            [disabled]="isNavigating"
             [routerLink]="['/trip-active', activeTrip.id]"
             class="ion-margin-top">
-            <ion-icon name="play-outline" slot="start"></ion-icon>
-            Continue Trip
+            <ion-icon [name]="isNavigating ? 'hourglass-outline' : 'play-outline'" slot="start"></ion-icon>
+            {{ isNavigating ? 'Loading...' : 'Continue Trip' }}
           </ion-button>
         </ion-card-content>
       </ion-card>
 
       <!-- Trips List -->
-      <div *ngIf="filteredTrips.length > 0">
+      <div *ngIf="filteredTrips.length > 0 && !isLoading">
         <ion-item-divider *ngIf="groupedTrips.length > 0">
           <ion-icon name="calendar-outline" slot="start"></ion-icon>
           <ion-label>Trip History</ion-label>
           <ion-badge slot="end" color="primary">{{ filteredTrips.length }}</ion-badge>
         </ion-item-divider>
 
-        <ion-card *ngFor="let trip of filteredTrips" class="ion-margin" [button]="true" (click)="viewTripDetails(trip.id)">
+        <ion-card *ngFor="let trip of filteredTrips" class="ion-margin" [button]="true" (click)="viewTripDetails(trip.id)" [disabled]="isNavigating">
           <ion-card-header>
             <ion-card-title>
               <ion-icon name="calendar-outline"></ion-icon>
@@ -219,18 +233,20 @@ import { TripManagementService } from './trip-management.service';
                 fill="outline" 
                 size="small" 
                 color="primary"
+                [disabled]="isNavigating"
                 (click)="viewTripDetails(trip.id); $event.stopPropagation()">
-                <ion-icon name="eye-outline" slot="start"></ion-icon>
-                View Details
+                <ion-icon [name]="isNavigating ? 'hourglass-outline' : 'eye-outline'" slot="start"></ion-icon>
+                {{ isNavigating ? 'Loading...' : 'View Details' }}
               </ion-button>
               
               <ion-button 
                 fill="outline" 
                 size="small" 
                 color="medium"
+                [disabled]="isDeleting"
                 (click)="showTripActions(trip); $event.stopPropagation()"
                 class="ion-margin-start">
-                <ion-icon name="ellipsis-horizontal-outline" slot="start"></ion-icon>
+                <ion-icon [name]="isDeleting ? 'hourglass-outline' : 'ellipsis-horizontal-outline'" slot="start"></ion-icon>
                 Actions
               </ion-button>
             </div>
@@ -239,7 +255,7 @@ import { TripManagementService } from './trip-management.service';
       </div>
 
       <!-- No Trips Message -->
-      <ion-card *ngIf="filteredTrips.length === 0 && !loading" class="ion-margin">
+      <ion-card *ngIf="filteredTrips.length === 0 && !isLoading" class="ion-margin">
         <ion-card-content>
           <ion-item lines="none">
             <ion-icon name="boat-outline" slot="start" color="medium" size="large"></ion-icon>
@@ -253,18 +269,19 @@ import { TripManagementService } from './trip-management.service';
           <ion-button 
             expand="block" 
             color="primary"
+            [disabled]="isNavigating"
             routerLink="/trip-start"
             class="ion-margin-top">
-            <ion-icon name="add-outline" slot="start"></ion-icon>
-            Start New Trip
+            <ion-icon [name]="isNavigating ? 'hourglass-outline' : 'add-outline'" slot="start"></ion-icon>
+            {{ isNavigating ? 'Loading...' : 'Start New Trip' }}
           </ion-button>
         </ion-card-content>
       </ion-card>
 
       <!-- Floating Action Button -->
       <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-        <ion-fab-button color="success" routerLink="/trip-start">
-          <ion-icon name="add-outline"></ion-icon>
+        <ion-fab-button color="success" routerLink="/trip-start" [disabled]="isNavigating">
+          <ion-icon [name]="isNavigating ? 'hourglass-outline' : 'add-outline'"></ion-icon>
         </ion-fab-button>
       </ion-fab>
 
@@ -278,7 +295,11 @@ export class TripLogComponent implements OnInit {
   activeTrip: Trip | null = null;
   searchTerm = '';
   sortBy = 'date-desc';
-  loading = true;
+  
+  // Loading states
+  isLoading = false;
+  isNavigating = false;
+  isDeleting = false;
   
   tripStats = {
     totalTrips: 0,
@@ -306,7 +327,7 @@ export class TripLogComponent implements OnInit {
   }
 
   async loadTrips() {
-    this.loading = true;
+    this.isLoading = true;
     try {
       this.trips = await this.tripService.getTrips();
       this.activeTrip = await this.tripService.getActiveTrip();
@@ -319,8 +340,9 @@ export class TripLogComponent implements OnInit {
       this.sortTrips();
     } catch (error) {
       console.error('Error loading trips:', error);
+      await this.showErrorToast('Failed to load trip history');
     } finally {
-      this.loading = false;
+      this.isLoading = false;
     }
   }
 
@@ -426,11 +448,25 @@ export class TripLogComponent implements OnInit {
     return 'danger';
   }
 
-  viewTripDetails(tripId: string) {
-    this.router.navigate(['/trip-details', tripId]);
+  async viewTripDetails(tripId: string) {
+    if (this.isNavigating) return;
+    
+    this.isNavigating = true;
+    try {
+      await this.router.navigate(['/trip-details', tripId]);
+    } catch (error) {
+      console.error('Error navigating to trip details:', error);
+      await this.showErrorToast('Failed to open trip details');
+    } finally {
+      setTimeout(() => {
+        this.isNavigating = false;
+      }, 1000);
+    }
   }
 
   async showFilterOptions() {
+    if (this.isLoading) return;
+    
     const actionSheet = await this.actionSheetCtrl.create({
       header: 'Filter & Sort Options',
       buttons: [
@@ -496,15 +532,12 @@ export class TripLogComponent implements OnInit {
 
   async duplicateTrip(trip: Trip) {
     // Implementation for duplicating a trip (copy settings for new trip)
-    const toast = await this.toastCtrl.create({
-      message: 'Trip duplication feature coming soon!',
-      duration: 2000,
-      color: 'medium'
-    });
-    await toast.present();
+    await this.showInfoToast('Trip duplication feature coming soon!');
   }
 
   async deleteTrip(trip: Trip) {
+    if (this.isDeleting) return;
+    
     const alert = await this.alertCtrl.create({
       header: 'Delete Trip',
       message: `Are you sure you want to delete the trip from ${trip.startDate.toLocaleDateString()}? This action cannot be undone.`,
@@ -514,25 +547,19 @@ export class TripLogComponent implements OnInit {
           text: 'Delete',
           role: 'destructive',
           handler: async () => {
+            this.isDeleting = true;
             try {
               await this.tripService.deleteTrip(trip.id);
+              
+              // Auto-refresh the list
               await this.loadTrips();
               
-              const toast = await this.toastCtrl.create({
-                message: 'Trip deleted successfully',
-                duration: 2000,
-                color: 'success'
-              });
-              await toast.present();
+              await this.showSuccessToast('Trip deleted successfully');
             } catch (error) {
               console.error('Error deleting trip:', error);
-              
-              const toast = await this.toastCtrl.create({
-                message: 'Error deleting trip. Please try again.',
-                duration: 3000,
-                color: 'danger'
-              });
-              await toast.present();
+              await this.showErrorToast('Error deleting trip. Please try again.');
+            } finally {
+              this.isDeleting = false;
             }
           }
         }
@@ -544,12 +571,7 @@ export class TripLogComponent implements OnInit {
 
   async exportTripData() {
     // Implementation for exporting trip data
-    const toast = await this.toastCtrl.create({
-      message: 'Export feature coming soon!',
-      duration: 2000,
-      color: 'medium'
-    });
-    await toast.present();
+    await this.showInfoToast('Export feature coming soon!');
   }
 
   async showTripStatistics() {
@@ -565,5 +587,41 @@ export class TripLogComponent implements OnInit {
     });
 
     await alert.present();
+  }
+
+  private async showSuccessToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 2000,
+      color: 'success',
+      position: 'bottom'
+    });
+    await toast.present();
+  }
+
+  private async showErrorToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 3000,
+      color: 'danger',
+      position: 'bottom',
+      buttons: [
+        {
+          text: 'Dismiss',
+          role: 'cancel'
+        }
+      ]
+    });
+    await toast.present();
+  }
+
+  private async showInfoToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 2000,
+      color: 'medium',
+      position: 'bottom'
+    });
+    await toast.present();
   }
 }

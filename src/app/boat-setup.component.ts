@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { AlertController, ToastController } from '@ionic/angular';
+import { AlertController, ToastController, LoadingController } from '@ionic/angular';
 import { 
   IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonIcon,
   IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle,
@@ -92,8 +92,9 @@ import { BoatManagementService } from './boat-management.service';
                 fill="outline" 
                 size="small" 
                 color="primary"
+                [disabled]="isUpdatingTank"
                 (click)="updateTankLevel(tank)">
-                <ion-icon name="create-outline" slot="icon-only"></ion-icon>
+                <ion-icon [name]="isUpdatingTank ? 'hourglass-outline' : 'create-outline'" slot="icon-only"></ion-icon>
               </ion-button>
             </ion-item>
           </ion-list>
@@ -101,7 +102,7 @@ import { BoatManagementService } from './boat-management.service';
       </ion-card>
 
       <!-- No Boat Setup Message -->
-      <ion-card *ngIf="!activeBoat" color="light">
+      <ion-card *ngIf="!activeBoat && !isLoading" color="light">
         <ion-card-header>
           <ion-card-title color="dark">
             <ion-icon name="boat-outline"></ion-icon>
@@ -152,15 +153,16 @@ import { BoatManagementService } from './boat-management.service';
               expand="block" 
               color="success"
               (click)="addBoat()" 
-              [disabled]="!newBoat.name">
-              <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
-              Create Boat
+              [disabled]="!newBoat.name || isAddingBoat">
+              <ion-icon [name]="isAddingBoat ? 'hourglass-outline' : 'checkmark-circle-outline'" slot="start"></ion-icon>
+              {{ isAddingBoat ? 'Creating...' : 'Create Boat' }}
             </ion-button>
             
             <ion-button 
               expand="block" 
               fill="outline" 
               color="medium"
+              [disabled]="isAddingBoat"
               (click)="cancelAddBoat()">
               <ion-icon name="close-circle-outline" slot="start"></ion-icon>
               Cancel
@@ -265,15 +267,16 @@ import { BoatManagementService } from './boat-management.service';
               expand="block" 
               color="success"
               (click)="addTank()" 
-              [disabled]="!canAddTank()">
-              <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
-              Add Tank
+              [disabled]="!canAddTank() || isAddingTank">
+              <ion-icon [name]="isAddingTank ? 'hourglass-outline' : 'checkmark-circle-outline'" slot="start"></ion-icon>
+              {{ isAddingTank ? 'Adding...' : 'Add Tank' }}
             </ion-button>
             
             <ion-button 
               expand="block" 
               fill="outline" 
               color="medium"
+              [disabled]="isAddingTank"
               (click)="cancelAddTank()">
               <ion-icon name="close-circle-outline" slot="start"></ion-icon>
               Cancel
@@ -331,6 +334,12 @@ export class BoatSetupComponent implements OnInit {
   totalFuel = 0;
   totalCapacity = 0;
   
+  // Loading states
+  isLoading = false;
+  isAddingBoat = false;
+  isAddingTank = false;
+  isUpdatingTank = false;
+  
   showAddBoatForm = false;
   showAddTankForm = false;
   
@@ -346,6 +355,7 @@ export class BoatSetupComponent implements OnInit {
     private boatService: BoatManagementService,
     private alertCtrl: AlertController,
     private toastCtrl: ToastController,
+    private loadingCtrl: LoadingController,
     private router: Router
   ) {}
 
@@ -353,35 +363,52 @@ export class BoatSetupComponent implements OnInit {
     await this.loadBoatInfo();
   }
 
+  async ionViewWillEnter() {
+    // Refresh data when returning to this page
+    await this.loadBoatInfo();
+  }
+
   async loadBoatInfo() {
-    this.activeBoat = await this.boatService.getActiveBoat();
-    
-    if (this.activeBoat) {
-      this.totalFuel = await this.boatService.getTotalFuel(this.activeBoat.id);
-      this.totalCapacity = await this.boatService.getTotalCapacity(this.activeBoat.id);
+    this.isLoading = true;
+    try {
+      this.activeBoat = await this.boatService.getActiveBoat();
+      
+      if (this.activeBoat) {
+        this.totalFuel = await this.boatService.getTotalFuel(this.activeBoat.id);
+        this.totalCapacity = await this.boatService.getTotalCapacity(this.activeBoat.id);
+      }
+    } catch (error) {
+      console.error('Error loading boat info:', error);
+      await this.showErrorToast('Failed to load boat information');
+    } finally {
+      this.isLoading = false;
     }
   }
 
   async addBoat() {
+    if (this.isAddingBoat || !this.newBoat.name.trim()) return;
+    
+    this.isAddingBoat = true;
     try {
       await this.boatService.addBoat({
-        name: this.newBoat.name,
+        name: this.newBoat.name.trim(),
         tanks: [],
         isActive: true
       });
       
+      // Auto-refresh data
       await this.loadBoatInfo();
+      
+      // Close form and reset
       this.cancelAddBoat();
       
-      const toast = await this.toastCtrl.create({
-        message: 'Boat added successfully!',
-        duration: 2000,
-        color: 'success'
-      });
-      toast.present();
+      await this.showSuccessToast('Boat added successfully!');
       
     } catch (error) {
       console.error('Error adding boat:', error);
+      await this.showErrorToast('Failed to add boat. Please try again.');
+    } finally {
+      this.isAddingBoat = false;
     }
   }
 
@@ -391,28 +418,30 @@ export class BoatSetupComponent implements OnInit {
   }
 
   async addTank() {
-    if (!this.activeBoat) return;
+    if (!this.activeBoat || this.isAddingTank || !this.canAddTank()) return;
     
+    this.isAddingTank = true;
     try {
       await this.boatService.addTank(this.activeBoat.id, {
-        name: this.newTank.name,
+        name: this.newTank.name.trim(),
         type: this.newTank.type,
         capacity: this.newTank.capacity,
         currentLevel: this.newTank.currentLevel
       });
       
+      // Auto-refresh data
       await this.loadBoatInfo();
+      
+      // Close form and reset
       this.cancelAddTank();
       
-      const toast = await this.toastCtrl.create({
-        message: 'Tank added successfully!',
-        duration: 2000,
-        color: 'success'
-      });
-      toast.present();
+      await this.showSuccessToast('Tank added successfully!');
       
     } catch (error) {
       console.error('Error adding tank:', error);
+      await this.showErrorToast('Failed to add tank. Please try again.');
+    } finally {
+      this.isAddingTank = false;
     }
   }
 
@@ -427,7 +456,7 @@ export class BoatSetupComponent implements OnInit {
   }
 
   canAddTank(): boolean {
-    return !!(this.newTank.name && 
+    return !!(this.newTank.name.trim() && 
               this.newTank.type && 
               this.newTank.capacity > 0 && 
               this.newTank.currentLevel >= 0 &&
@@ -435,6 +464,8 @@ export class BoatSetupComponent implements OnInit {
   }
 
   async updateTankLevel(tank: TankConfig) {
+    if (this.isUpdatingTank) return;
+    
     const alert = await this.alertCtrl.create({
       header: `Update ${tank.name}`,
       message: 'Enter the current fuel level',
@@ -455,19 +486,9 @@ export class BoatSetupComponent implements OnInit {
           handler: async (data) => {
             const newLevel = parseFloat(data.level);
             if (newLevel >= 0 && newLevel <= tank.capacity) {
-              try {
-                await this.boatService.updateTankLevel(this.activeBoat!.id, tank.id, newLevel);
-                await this.loadBoatInfo();
-                
-                const toast = await this.toastCtrl.create({
-                  message: 'Tank level updated successfully!',
-                  duration: 2000,
-                  color: 'success'
-                });
-                toast.present();
-              } catch (error) {
-                console.error('Error updating tank level:', error);
-              }
+              await this.performTankUpdate(tank, newLevel);
+            } else {
+              await this.showErrorToast('Invalid fuel level entered');
             }
           }
         }
@@ -475,6 +496,49 @@ export class BoatSetupComponent implements OnInit {
     });
     
     await alert.present();
+  }
+
+  private async performTankUpdate(tank: TankConfig, newLevel: number) {
+    this.isUpdatingTank = true;
+    try {
+      await this.boatService.updateTankLevel(this.activeBoat!.id, tank.id, newLevel);
+      
+      // Auto-refresh data
+      await this.loadBoatInfo();
+      
+      await this.showSuccessToast('Tank level updated successfully!');
+    } catch (error) {
+      console.error('Error updating tank level:', error);
+      await this.showErrorToast('Failed to update tank level');
+    } finally {
+      this.isUpdatingTank = false;
+    }
+  }
+
+  private async showSuccessToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 2000,
+      color: 'success',
+      position: 'bottom'
+    });
+    await toast.present();
+  }
+
+  private async showErrorToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 3000,
+      color: 'danger',
+      position: 'bottom',
+      buttons: [
+        {
+          text: 'Dismiss',
+          role: 'cancel'
+        }
+      ]
+    });
+    await toast.present();
   }
 
   getProgressColor(percentage: number): string {

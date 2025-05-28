@@ -32,8 +32,21 @@ import { TripManagementService } from './trip-management.service';
 
     <ion-content class="ion-padding">
 
+      <!-- Loading State -->
+      <ion-card *ngIf="isLoading" class="ion-margin">
+        <ion-card-content>
+          <ion-item lines="none">
+            <ion-icon name="hourglass-outline" slot="start" color="primary"></ion-icon>
+            <ion-label>
+              <h3>Loading Trip Data...</h3>
+              <p>Please wait while we load your trip information</p>
+            </ion-label>
+          </ion-item>
+        </ion-card-content>
+      </ion-card>
+
       <!-- Current Status -->
-      <ion-card *ngIf="activeBoat && trip">
+      <ion-card *ngIf="activeBoat && trip && !isLoading">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="information-circle-outline"></ion-icon>
@@ -79,7 +92,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Tank Switch Form -->
-      <ion-card>
+      <ion-card *ngIf="!isLoading">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="create-outline"></ion-icon>
@@ -155,7 +168,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Selected Tanks Preview -->
-      <ion-card *ngIf="getSelectedTanks().length > 0" color="light">
+      <ion-card *ngIf="getSelectedTanks().length > 0 && !isLoading" color="light">
         <ion-card-header>
           <ion-card-title color="dark">
             <ion-icon name="checkmark-done-outline"></ion-icon>
@@ -180,15 +193,15 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Action Buttons -->
-      <ion-card>
+      <ion-card *ngIf="!isLoading">
         <ion-card-content>
           <ion-button 
             expand="block" 
             color="success"
             (click)="logTankSwitch()"
-            [disabled]="!canLogSwitch()">
-            <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
-            Log Tank Switch
+            [disabled]="!canLogSwitch() || isLogging">
+            <ion-icon [name]="isLogging ? 'hourglass-outline' : 'checkmark-circle-outline'" slot="start"></ion-icon>
+            {{ isLogging ? 'Logging...' : 'Log Tank Switch' }}
           </ion-button>
           
           <ion-item *ngIf="!canLogSwitch()" color="warning" lines="none" class="ion-margin-top">
@@ -207,6 +220,10 @@ export class EventTankSwitchComponent implements OnInit {
   trip: Trip | null = null;
   activeBoat: BoatConfig | null = null;
   tripId!: string;
+  
+  // Loading states
+  isLoading = false;
+  isLogging = false;
   
   currentOdometer = 0;
   garminTotalFuel = 0;
@@ -227,20 +244,28 @@ export class EventTankSwitchComponent implements OnInit {
   }
 
   async loadTripData() {
-    const trips = await this.tripService.getTrips();
-    this.trip = trips.find(t => t.id === this.tripId) || null;
-    
-    if (this.trip) {
-      this.activeBoat = await this.boatService.getActiveBoat();
-      this.currentOdometer = this.getLastOdometer();
-      this.garminTotalFuel = this.getLastGarminTotal();
+    this.isLoading = true;
+    try {
+      const trips = await this.tripService.getTrips();
+      this.trip = trips.find(t => t.id === this.tripId) || null;
       
-      // Initialize tank selection
-      if (this.activeBoat) {
-        this.activeBoat.tanks.forEach(tank => {
-          this.newActiveTanks[tank.id] = false;
-        });
+      if (this.trip) {
+        this.activeBoat = await this.boatService.getActiveBoat();
+        this.currentOdometer = this.getLastOdometer();
+        this.garminTotalFuel = this.getLastGarminTotal();
+        
+        // Initialize tank selection
+        if (this.activeBoat) {
+          this.activeBoat.tanks.forEach(tank => {
+            this.newActiveTanks[tank.id] = false;
+          });
+        }
       }
+    } catch (error) {
+      console.error('Error loading trip data:', error);
+      await this.showErrorToast('Failed to load trip data');
+    } finally {
+      this.isLoading = false;
     }
   }
 
@@ -322,8 +347,9 @@ export class EventTankSwitchComponent implements OnInit {
   }
 
   async logTankSwitch() {
-    if (!this.canLogSwitch()) return;
+    if (!this.canLogSwitch() || this.isLogging) return;
 
+    this.isLogging = true;
     try {
       await this.tripService.addTripEventWithGarmin(this.tripId, {
         timestamp: new Date(),
@@ -334,24 +360,42 @@ export class EventTankSwitchComponent implements OnInit {
         activity: this.switchReason || undefined
       });
 
-      const toast = await this.toastCtrl.create({
-        message: 'Tank switch logged successfully!',
-        duration: 2000,
-        color: 'success'
-      });
-      await toast.present();
+      await this.showSuccessToast('Tank switch logged successfully!');
 
-      this.router.navigate(['/trip-active', this.tripId]);
+      // Navigate back to active trip
+      await this.router.navigate(['/trip-active', this.tripId]);
 
     } catch (error) {
       console.error('Error logging tank switch:', error);
-      
-      const toast = await this.toastCtrl.create({
-        message: 'Error logging event. Please try again.',
-        duration: 3000,
-        color: 'danger'
-      });
-      await toast.present();
+      await this.showErrorToast('Error logging event. Please try again.');
+    } finally {
+      this.isLogging = false;
     }
+  }
+
+  private async showSuccessToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 2000,
+      color: 'success',
+      position: 'bottom'
+    });
+    await toast.present();
+  }
+
+  private async showErrorToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 3000,
+      color: 'danger',
+      position: 'bottom',
+      buttons: [
+        {
+          text: 'Dismiss',
+          role: 'cancel'
+        }
+      ]
+    });
+    await toast.present();
   }
 }

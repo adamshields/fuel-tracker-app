@@ -28,7 +28,7 @@ import { TripManagementService } from './trip-management.service';
           Active Trip
         </ion-title>
         <ion-buttons slot="end">
-          <ion-button (click)="endTrip()" color="danger" fill="clear">
+          <ion-button (click)="endTrip()" color="danger" fill="clear" [disabled]="isLoading">
             <ion-icon name="stop-circle-outline" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
@@ -37,8 +37,21 @@ import { TripManagementService } from './trip-management.service';
 
     <ion-content>
 
+      <!-- Loading State -->
+      <ion-card *ngIf="isLoading" class="ion-margin">
+        <ion-card-content>
+          <ion-item lines="none">
+            <ion-icon name="hourglass-outline" slot="start" color="primary"></ion-icon>
+            <ion-label>
+              <h3>Loading Trip Data...</h3>
+              <p>Please wait while we refresh your trip information</p>
+            </ion-label>
+          </ion-item>
+        </ion-card-content>
+      </ion-card>
+
       <!-- Trip Status Overview -->
-      <ion-card *ngIf="trip" color="warning" class="ion-margin">
+      <ion-card *ngIf="trip && !isLoading" color="warning" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="time-outline"></ion-icon>
@@ -63,7 +76,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Fuel Status -->
-      <ion-card *ngIf="activeBoat" class="ion-margin">
+      <ion-card *ngIf="activeBoat && !isLoading" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="speedometer-outline"></ion-icon>
@@ -116,7 +129,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Trip Actions -->
-      <ion-card class="ion-margin">
+      <ion-card *ngIf="!isLoading" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="add-circle-outline"></ion-icon>
@@ -128,15 +141,16 @@ import { TripManagementService } from './trip-management.service';
           <ion-button 
             expand="block" 
             color="primary"
+            [disabled]="isNavigating"
             (click)="showEventOptions()"
             class="ion-margin-bottom">
-            <ion-icon name="add-outline" slot="start"></ion-icon>
-            Log Event
+            <ion-icon [name]="isNavigating ? 'hourglass-outline' : 'add-outline'" slot="start"></ion-icon>
+            {{ isNavigating ? 'Loading...' : 'Log Event' }}
           </ion-button>
           
           <!-- Quick Action Buttons -->
           <ion-list lines="none">
-            <ion-item button (click)="addTankSwitch()">
+            <ion-item button (click)="addTankSwitch()" [disabled]="isNavigating">
               <ion-icon name="swap-horizontal-outline" slot="start" color="warning"></ion-icon>
               <ion-label>
                 <h3>Switch Tanks</h3>
@@ -145,7 +159,7 @@ import { TripManagementService } from './trip-management.service';
               <ion-icon name="chevron-forward-outline" slot="end"></ion-icon>
             </ion-item>
             
-            <ion-item button (click)="addActivityChange()">
+            <ion-item button (click)="addActivityChange()" [disabled]="isNavigating">
               <ion-icon name="flag-outline" slot="start" color="tertiary"></ion-icon>
               <ion-label>
                 <h3>Activity Change</h3>
@@ -154,7 +168,7 @@ import { TripManagementService } from './trip-management.service';
               <ion-icon name="chevron-forward-outline" slot="end"></ion-icon>
             </ion-item>
             
-            <ion-item button (click)="addFuelStop()">
+            <ion-item button (click)="addFuelStop()" [disabled]="isNavigating">
               <ion-icon name="car-outline" slot="start" color="success"></ion-icon>
               <ion-label>
                 <h3>Fuel Stop</h3>
@@ -167,7 +181,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Trip Timeline -->
-      <ion-card *ngIf="trip" class="ion-margin">
+      <ion-card *ngIf="trip && !isLoading" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="list-outline"></ion-icon>
@@ -226,6 +240,7 @@ import { TripManagementService } from './trip-management.service';
                   fill="outline" 
                   size="small" 
                   color="primary"
+                  [disabled]="isNavigating"
                   (click)="editEvent(getReversedEvents().length - 1 - i)"
                   *ngIf="i > 0"
                   class="ion-margin-top">
@@ -238,7 +253,7 @@ import { TripManagementService } from './trip-management.service';
       </ion-card>
 
       <!-- Trip Controls -->
-      <ion-card class="ion-margin">
+      <ion-card *ngIf="!isLoading" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="settings-outline"></ion-icon>
@@ -250,16 +265,18 @@ import { TripManagementService } from './trip-management.service';
           <ion-button 
             expand="block" 
             color="danger"
+            [disabled]="isNavigating"
             (click)="endTrip()"
             class="ion-margin-bottom">
-            <ion-icon name="stop-circle-outline" slot="start"></ion-icon>
-            End Trip
+            <ion-icon [name]="isNavigating ? 'hourglass-outline' : 'stop-circle-outline'" slot="start"></ion-icon>
+            {{ isNavigating ? 'Loading...' : 'End Trip' }}
           </ion-button>
           
           <ion-button 
             expand="block" 
             fill="outline" 
             color="primary"
+            [disabled]="isNavigating"
             routerLink="/dashboard">
             <ion-icon name="home-outline" slot="start"></ion-icon>
             Return to Dashboard
@@ -274,6 +291,10 @@ export class TripActiveComponent implements OnInit {
   trip: Trip | null = null;
   activeBoat: BoatConfig | null = null;
   tripId!: string;
+  
+  // Loading states
+  isLoading = false;
+  isNavigating = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -290,12 +311,25 @@ export class TripActiveComponent implements OnInit {
     await this.loadTripData();
   }
 
+  async ionViewWillEnter() {
+    // Refresh data when returning from event pages
+    await this.loadTripData();
+  }
+
   async loadTripData() {
-    const trips = await this.tripService.getTrips();
-    this.trip = trips.find(t => t.id === this.tripId) || null;
-    
-    if (this.trip) {
-      this.activeBoat = await this.boatService.getActiveBoat();
+    this.isLoading = true;
+    try {
+      const trips = await this.tripService.getTrips();
+      this.trip = trips.find(t => t.id === this.tripId) || null;
+      
+      if (this.trip) {
+        this.activeBoat = await this.boatService.getActiveBoat();
+      }
+    } catch (error) {
+      console.error('Error loading trip data:', error);
+      await this.showErrorToast('Failed to load trip data');
+    } finally {
+      this.isLoading = false;
     }
   }
 
@@ -442,6 +476,8 @@ export class TripActiveComponent implements OnInit {
   }
 
   async showEventOptions() {
+    if (this.isNavigating) return;
+    
     const actionSheet = await this.actionSheetCtrl.create({
       header: 'Add Trip Event',
       buttons: [
@@ -477,22 +513,60 @@ export class TripActiveComponent implements OnInit {
   }
 
   async addTankSwitch() {
-    this.router.navigate(['/event-tank-switch', this.tripId]);
+    if (this.isNavigating) return;
+    
+    this.isNavigating = true;
+    try {
+      await this.router.navigate(['/event-tank-switch', this.tripId]);
+    } finally {
+      setTimeout(() => {
+        this.isNavigating = false;
+      }, 1000);
+    }
   }
 
   async addActivityChange() {
-    this.router.navigate(['/event-activity', this.tripId]);
+    if (this.isNavigating) return;
+    
+    this.isNavigating = true;
+    try {
+      await this.router.navigate(['/event-activity', this.tripId]);
+    } finally {
+      setTimeout(() => {
+        this.isNavigating = false;
+      }, 1000);
+    }
   }
 
   async addFuelStop() {
-    this.router.navigate(['/event-fuel-stop', this.tripId]);
+    if (this.isNavigating) return;
+    
+    this.isNavigating = true;
+    try {
+      await this.router.navigate(['/event-fuel-stop', this.tripId]);
+    } finally {
+      setTimeout(() => {
+        this.isNavigating = false;
+      }, 1000);
+    }
   }
 
   async addGeneralNote() {
-    this.router.navigate(['/event-note', this.tripId]);
+    if (this.isNavigating) return;
+    
+    this.isNavigating = true;
+    try {
+      await this.router.navigate(['/event-note', this.tripId]);
+    } finally {
+      setTimeout(() => {
+        this.isNavigating = false;
+      }, 1000);
+    }
   }
 
   async endTrip() {
+    if (this.isNavigating) return;
+    
     const alert = await this.alertCtrl.create({
       header: 'End Trip',
       message: 'Are you ready to end this trip and return to dock?',
@@ -500,8 +574,18 @@ export class TripActiveComponent implements OnInit {
         { text: 'Cancel', role: 'cancel' },
         {
           text: 'End Trip',
-          handler: () => {
-            this.router.navigate(['/trip-complete', this.tripId]);
+          handler: async () => {
+            this.isNavigating = true;
+            try {
+              await this.router.navigate(['/trip-complete', this.tripId]);
+            } catch (error) {
+              console.error('Error navigating to trip completion:', error);
+              await this.showErrorToast('Failed to navigate to trip completion');
+            } finally {
+              setTimeout(() => {
+                this.isNavigating = false;
+              }, 1000);
+            }
           }
         }
       ]
@@ -510,7 +594,32 @@ export class TripActiveComponent implements OnInit {
     await alert.present();
   }
 
-  editEvent(eventIndex: number) {
-    this.router.navigate(['/edit-trip-event', this.tripId, eventIndex]);
+  async editEvent(eventIndex: number) {
+    if (this.isNavigating) return;
+    
+    this.isNavigating = true;
+    try {
+      await this.router.navigate(['/edit-trip-event', this.tripId, eventIndex]);
+    } finally {
+      setTimeout(() => {
+        this.isNavigating = false;
+      }, 1000);
+    }
+  }
+
+  private async showErrorToast(message: string) {
+    const toast = await this.toastCtrl.create({
+      message: message,
+      duration: 3000,
+      color: 'danger',
+      position: 'bottom',
+      buttons: [
+        {
+          text: 'Dismiss',
+          role: 'cancel'
+        }
+      ]
+    });
+    await toast.present();
   }
 }
