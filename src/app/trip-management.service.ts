@@ -30,7 +30,12 @@ export class TripManagementService {
     await Preferences.set({ key: TRIPS_STORAGE_KEY, value: JSON.stringify(trips) });
   }
 
-  async startTrip(boatId: string, initialEvent: Omit<TripEvent, 'id' | 'tripId'>): Promise<Trip> {
+  async startTrip(
+    boatId: string, 
+    initialEvent: Omit<TripEvent, 'id' | 'tripId'>,
+    tripName?: string,
+    customStartDate?: Date
+  ): Promise<Trip> {
     const trips = await this.getTrips();
     
     // Check if there's already an active trip
@@ -45,7 +50,8 @@ export class TripManagementService {
     const trip: Trip = {
       id: tripId,
       boatId,
-      startDate: new Date(),
+      name: tripName,
+      startDate: customStartDate || new Date(),
       status: 'active',
       events: [{
         ...initialEvent,
@@ -58,6 +64,84 @@ export class TripManagementService {
     trips.push(trip);
     await this.saveTrips(trips);
     return trip;
+  }
+
+  async updateTripDetails(tripId: string, updates: {
+    name?: string;
+    startDate?: Date;
+    endDate?: Date;
+    startingOdometer?: number;
+    notes?: string;
+  }): Promise<void> {
+    const trips = await this.getTrips();
+    const tripIndex = trips.findIndex(t => t.id === tripId);
+    
+    if (tripIndex === -1) {
+      throw new Error('Trip not found');
+    }
+
+    const trip = trips[tripIndex];
+
+    // Update the trip with new details
+    if (updates.name !== undefined) trip.name = updates.name;
+    if (updates.startDate !== undefined) trip.startDate = updates.startDate;
+    if (updates.endDate !== undefined) trip.endDate = updates.endDate;
+    if (updates.notes !== undefined) trip.notes = updates.notes;
+
+    // Update starting odometer (first event's odometer)
+    if (updates.startingOdometer !== undefined && trip.events.length > 0) {
+      const oldOdometer = trip.events[0].odometer;
+      const odometerDifference = updates.startingOdometer - oldOdometer;
+      
+      // Update all event odometers to maintain relative distances
+      trip.events.forEach(event => {
+        event.odometer += odometerDifference;
+      });
+    }
+
+    await this.saveTrips(trips);
+  }
+
+  async duplicateTrip(originalTripId: string, newTripName?: string): Promise<Trip> {
+    const trips = await this.getTrips();
+    const originalTrip = trips.find(t => t.id === originalTripId);
+    
+    if (!originalTrip) {
+      throw new Error('Original trip not found');
+    }
+
+    // Check if there's already an active trip
+    const activeTrip = trips.find(trip => trip.status === 'active');
+    if (activeTrip) {
+      throw new Error('There is already an active trip. Complete it first.');
+    }
+
+    const newTripId = this.generateId();
+    const now = new Date();
+    
+    // Create new trip with similar configuration but current date/time
+    const duplicatedTrip: Trip = {
+      id: newTripId,
+      boatId: originalTrip.boatId,
+      name: newTripName || `${originalTrip.name || 'Trip'} - Copy`,
+      startDate: now,
+      status: 'active',
+      events: [{
+        id: this.generateId(),
+        tripId: newTripId,
+        timestamp: now,
+        type: 'departure',
+        // Copy the fuel configuration from the original trip's first event
+        odometer: 0, // User will need to set this
+        fuelLevels: { ...originalTrip.events[0].fuelLevels },
+        activeTanks: [...originalTrip.events[0].activeTanks],
+        notes: `Duplicated from trip: ${originalTrip.name || originalTrip.startDate.toLocaleDateString()}`
+      }]
+    };
+
+    trips.push(duplicatedTrip);
+    await this.saveTrips(trips);
+    return duplicatedTrip;
   }
 
   async addTripEvent(tripId: string, event: Omit<TripEvent, 'id' | 'tripId'>): Promise<void> {
@@ -132,7 +216,7 @@ export class TripManagementService {
     // If this is an arrival event, complete the trip
     if (event.type === 'arrival') {
       trip.status = 'completed';
-      trip.endDate = new Date();
+      trip.endDate = event.timestamp; // Use the event timestamp for end date
       
       // Update boat tank levels to match final event
       await this.updateBoatTankLevels(trip.boatId, fuelLevels);

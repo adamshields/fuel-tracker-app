@@ -21,10 +21,12 @@ import { TripManagementService } from './trip-management.service';
     <ion-header>
       <ion-toolbar color="primary">
         <ion-buttons slot="start">
-          <ion-back-button defaultHref="/dashboard"></ion-back-button>
+          <ion-back-button 
+            [defaultHref]="'/dashboard'"
+            (click)="navigateBack($event)">
+          </ion-back-button>
         </ion-buttons>
         <ion-title>
-          <!-- <ion-icon name="navigate-circle-outline"></ion-icon> -->
           Active Trip
         </ion-title>
         <ion-buttons slot="end">
@@ -58,7 +60,7 @@ import { TripManagementService } from './trip-management.service';
             {{ getElapsedTime() }} Active
           </ion-card-title>
           <ion-card-subtitle>
-            Trip in progress • {{ trip.events.length }} events logged
+            {{ trip.name || 'Trip in progress' }} • {{ trip.events.length }} events logged
           </ion-card-subtitle>
         </ion-card-header>
         <ion-card-content>
@@ -92,7 +94,7 @@ import { TripManagementService } from './trip-management.service';
               <ion-badge slot="end" color="success">LIVE</ion-badge>
             </ion-item-divider>
             
-            <ion-item *ngFor="let tank of activeBoat.tanks">
+            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
               <ion-icon 
                 [name]="getTankIcon(tank.id)" 
                 slot="start"
@@ -277,7 +279,7 @@ import { TripManagementService } from './trip-management.service';
             fill="outline" 
             color="primary"
             [disabled]="isNavigating"
-            routerLink="/dashboard">
+            (click)="navigateToDashboard()">
             <ion-icon name="home-outline" slot="start"></ion-icon>
             Return to Dashboard
           </ion-button>
@@ -306,6 +308,10 @@ export class TripActiveComponent implements OnInit {
     private toastCtrl: ToastController
   ) {}
 
+  trackByTankId(index: number, tank: { id: string }): string {
+    return tank.id;
+  }
+  
   async ngOnInit() {
     this.tripId = this.route.snapshot.paramMap.get('id')!;
     await this.loadTripData();
@@ -315,6 +321,11 @@ export class TripActiveComponent implements OnInit {
     // Refresh data when returning from event pages
     await this.loadTripData();
   }
+
+  // async ionViewDidEnter() {
+  //   // Also refresh when view has fully entered
+  //   await this.loadTripData();
+  // }
 
   async loadTripData() {
     this.isLoading = true;
@@ -330,6 +341,28 @@ export class TripActiveComponent implements OnInit {
       await this.showErrorToast('Failed to load trip data');
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  // Fix back button navigation
+  navigateBack(event: Event) {
+    event.preventDefault();
+    this.navigateToDashboard();
+  }
+
+  async navigateToDashboard() {
+    if (this.isNavigating) return;
+    
+    this.isNavigating = true;
+    try {
+      await this.router.navigate(['/dashboard']);
+    } catch (error) {
+      console.error('Error navigating to dashboard:', error);
+      await this.showErrorToast('Failed to navigate to dashboard');
+    } finally {
+      setTimeout(() => {
+        this.isNavigating = false;
+      }, 1000);
     }
   }
 

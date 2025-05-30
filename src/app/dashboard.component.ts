@@ -9,7 +9,7 @@ import {
   IonList, IonBadge, IonItemDivider, IonChip, IonAvatar, IonThumbnail
 } from '@ionic/angular/standalone';
 
-import { BoatConfig, Trip } from './boat.model';
+import { BoatConfig, TankConfig, Trip } from './boat.model';
 import { BoatManagementService } from './boat-management.service';
 import { TripManagementService } from './trip-management.service';
 
@@ -39,7 +39,7 @@ import { TripManagementService } from './trip-management.service';
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="navigate-circle-outline"></ion-icon>
-            Trip in Progress
+            {{ activeTrip.name || 'Trip in Progress' }}
           </ion-card-title>
           <ion-card-subtitle>
             Started {{ activeTrip.startDate | date:'short' }}
@@ -118,7 +118,7 @@ import { TripManagementService } from './trip-management.service';
               <ion-label>Tank Details</ion-label>
             </ion-item-divider>
             
-            <ion-item *ngFor="let tank of activeBoat.tanks">
+            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
               <ion-icon 
                 [name]="getTankIcon(tank.type)" 
                 slot="start"
@@ -175,7 +175,7 @@ import { TripManagementService } from './trip-management.service';
         </ion-card-content>
       </ion-card>
 
-      <!-- Recent Trips -->
+      <!-- Recent Trips (Limited to 4) -->
       <ion-card *ngIf="recentTrips.length > 0" class="ion-margin">
         <ion-card-header>
           <ion-card-title>
@@ -190,7 +190,7 @@ import { TripManagementService } from './trip-management.service';
               <ion-icon name="boat-outline" slot="start" color="primary"></ion-icon>
               
               <ion-label>
-                <h3>{{ trip.startDate | date:'MMM d, yyyy' }}</h3>
+                <h3>{{ trip.name || (trip.startDate | date:'MMM d, yyyy') }}</h3>
                 <p>{{ trip.events.length }} events recorded</p>
                 <p>Distance: {{ calculateTripDistance(trip) }} miles</p>
               </ion-label>
@@ -304,7 +304,6 @@ export class DashboardComponent implements OnInit {
   totalFuel = 0;
   totalCapacity = 0;
   
-  // Loading states
   isLoading = false;
   isNavigating = false;
 
@@ -322,27 +321,27 @@ export class DashboardComponent implements OnInit {
   }
 
   async ionViewWillEnter() {
-    // Always refresh when returning to dashboard
     await this.loadData();
   }
 
   async loadData() {
     this.isLoading = true;
     try {
-      this.activeBoat = await this.boatService.getActiveBoat();
-      
+      const boat = await this.boatService.getActiveBoat();
+      this.activeBoat = boat ? structuredClone(boat) : null;
+
       if (this.activeBoat) {
         this.totalFuel = await this.boatService.getTotalFuel(this.activeBoat.id);
         this.totalCapacity = await this.boatService.getTotalCapacity(this.activeBoat.id);
       }
 
       this.activeTrip = await this.tripService.getActiveTrip();
-      
+
       const allTrips = await this.tripService.getTrips();
       this.recentTrips = allTrips
         .filter(trip => trip.status === 'completed')
         .sort((a, b) => b.startDate.getTime() - a.startDate.getTime())
-        .slice(0, 5);
+        .slice(0, 4);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       await this.showErrorToast('Failed to load dashboard data');
@@ -351,11 +350,13 @@ export class DashboardComponent implements OnInit {
     }
   }
 
+  trackByTankId(index: number, tank: TankConfig): string {
+    return tank.id;
+  }
+
   async startTrip() {
-    if (!this.activeBoat || this.totalFuel <= 0 || this.isNavigating) {
-      return;
-    }
-    
+    if (!this.activeBoat || this.totalFuel <= 0 || this.isNavigating) return;
+
     this.isNavigating = true;
     try {
       await this.router.navigate(['/trip-start']);
@@ -363,16 +364,13 @@ export class DashboardComponent implements OnInit {
       console.error('Error navigating to trip start:', error);
       await this.showErrorToast('Failed to navigate to trip start');
     } finally {
-      // Reset after navigation completes
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      setTimeout(() => (this.isNavigating = false), 1000);
     }
   }
 
   async continueTrip() {
     if (!this.activeTrip || this.isNavigating) return;
-    
+
     this.isNavigating = true;
     try {
       await this.router.navigate(['/trip-active', this.activeTrip.id]);
@@ -380,9 +378,7 @@ export class DashboardComponent implements OnInit {
       console.error('Error navigating to active trip:', error);
       await this.showErrorToast('Failed to navigate to active trip');
     } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      setTimeout(() => (this.isNavigating = false), 1000);
     }
   }
 
@@ -404,9 +400,7 @@ export class DashboardComponent implements OnInit {
               console.error('Error ending trip:', error);
               await this.showErrorToast('Failed to navigate to trip completion');
             } finally {
-              setTimeout(() => {
-                this.isNavigating = false;
-              }, 1000);
+              setTimeout(() => (this.isNavigating = false), 1000);
             }
           }
         }
@@ -416,18 +410,9 @@ export class DashboardComponent implements OnInit {
     await alert.present();
   }
 
-  calculateTripDistance(trip: Trip): number {
-    if (trip.events.length < 2) return 0;
-    
-    const firstEvent = trip.events[0];
-    const lastEvent = trip.events[trip.events.length - 1];
-    
-    return lastEvent.odometer - firstEvent.odometer;
-  }
-
   async viewTrip(tripId: string) {
     if (this.isNavigating) return;
-    
+
     this.isNavigating = true;
     try {
       await this.router.navigate(['/trip-details', tripId]);
@@ -435,26 +420,34 @@ export class DashboardComponent implements OnInit {
       console.error('Error navigating to trip details:', error);
       await this.showErrorToast('Failed to open trip details');
     } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      setTimeout(() => (this.isNavigating = false), 1000);
     }
+  }
+
+  calculateTripDistance(trip: Trip): number {
+    if (trip.events.length < 2) return 0;
+    return trip.events[trip.events.length - 1].odometer - trip.events[0].odometer;
   }
 
   private async showErrorToast(message: string) {
     const toast = await this.toastCtrl.create({
-      message: message,
+      message,
       duration: 3000,
       color: 'danger',
       position: 'bottom',
-      buttons: [
-        {
-          text: 'Dismiss',
-          role: 'cancel'
-        }
-      ]
+      buttons: [{ text: 'Dismiss', role: 'cancel' }]
     });
     await toast.present();
+  }
+
+  getFuelPercentage(): number {
+    if (this.totalCapacity === 0) return 0;
+    return Math.round((this.totalFuel / this.totalCapacity) * 100);
+  }
+
+  getTankPercentage(tank: TankConfig): number {
+    if (tank.capacity === 0) return 0;
+    return Math.round((tank.currentLevel / tank.capacity) * 100);
   }
 
   getTotalFuelColor(): string {
@@ -478,16 +471,6 @@ export class DashboardComponent implements OnInit {
       case 'aux': return 'Auxiliary';
       default: return type;
     }
-  }
-
-  getFuelPercentage(): number {
-    if (this.totalCapacity === 0) return 0;
-    return Math.round((this.totalFuel / this.totalCapacity) * 100);
-  }
-
-  getTankPercentage(tank: any): number {
-    if (tank.capacity === 0) return 0;
-    return Math.round((tank.currentLevel / tank.capacity) * 100);
   }
 
   getTankIcon(type: string): string {

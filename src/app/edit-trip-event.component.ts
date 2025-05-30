@@ -24,7 +24,6 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button [defaultHref]="'/trip-details/' + tripId"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <!-- <ion-icon name="create-outline"></ion-icon> -->
           Edit Event
         </ion-title>
         <ion-buttons slot="end">
@@ -32,7 +31,7 @@ import { TripManagementService } from './trip-management.service';
             color="danger" 
             fill="clear"
             (click)="deleteEvent()" 
-            *ngIf="eventIndex > 0 && trip && eventIndex < trip.events.length - 1">
+            *ngIf="canDeleteEvent()">
             <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
@@ -52,13 +51,13 @@ import { TripManagementService } from './trip-management.service';
         </ion-card-header>
       </ion-card>
 
-      <!-- Cannot Edit First/Last Event Warning -->
-      <ion-card *ngIf="(eventIndex === 0) || (trip && eventIndex === trip.events.length - 1)" color="warning">
+      <!-- Special Event Warning -->
+      <ion-card *ngIf="isSpecialEvent() && !canEditSpecialEvent()" color="warning">
         <ion-card-content>
           <ion-item color="warning" lines="none">
             <ion-icon name="alert-circle-outline" slot="start"></ion-icon>
             <ion-label class="ion-text-wrap">
-              <strong>Limited Editing:</strong> {{ eventIndex === 0 ? 'Starting' : 'Final' }} events can only have limited edits to prevent data corruption.
+              <strong>Special Event:</strong> {{ getSpecialEventMessage() }}
             </ion-label>
           </ion-item>
         </ion-card-content>
@@ -86,7 +85,10 @@ import { TripManagementService } from './trip-management.service';
                 [disabled]="!canEditOdometer()">
               </ion-input>
               <ion-note slot="helper" *ngIf="!canEditOdometer()">
-                Cannot edit odometer for first/last event
+                {{ getOdometerEditMessage() }}
+              </ion-note>
+              <ion-note slot="helper" *ngIf="canEditOdometer() && isDepartureEvent()">
+                <strong>Warning:</strong> Changing departure odometer affects all trip calculations
               </ion-note>
             </ion-item>
 
@@ -111,7 +113,7 @@ import { TripManagementService } from './trip-management.service';
                 <p>Enter fuel level for each tank</p>
               </ion-label>
             </ion-item>
-            <ion-item *ngFor="let tank of activeBoat.tanks">
+            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
               <ion-icon name="water-outline" slot="start" color="primary"></ion-icon>
               <ion-label position="stacked">{{ tank.name }}</ion-label>
               <ion-input 
@@ -133,7 +135,8 @@ import { TripManagementService } from './trip-management.service';
                 <p>Select tanks that were active at this event</p>
               </ion-label>
             </ion-item>
-            <ion-item *ngFor="let tank of activeBoat.tanks">
+            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
+
               <ion-checkbox 
                 slot="start" 
                 [(ngModel)]="editForm.activeTanks[tank.id]"
@@ -285,7 +288,11 @@ export class EditTripEventComponent implements OnInit {
     private toastCtrl: ToastController,
     private alertCtrl: AlertController
   ) {}
-
+  
+  trackByTankId(index: number, tank: { id: string }) {
+    return tank.id;
+  }
+  
   async ngOnInit() {
     this.tripId = this.route.snapshot.paramMap.get('tripId')!;
     this.eventIndex = parseInt(this.route.snapshot.paramMap.get('eventIndex')!, 10);
@@ -343,9 +350,48 @@ export class EditTripEventComponent implements OnInit {
   }
 
   canEditOdometer(): boolean {
-    // Can't edit odometer of first or last event (would break calculations)
+    // Can now edit departure odometer, but still restrict middle events to prevent breaking sequence
+    if (this.isDepartureEvent()) return true; // Allow departure editing
+    if (this.isArrivalEvent()) return false; // Still restrict arrival to prevent issues
+    
+    // For middle events, still check constraints
     if (!this.trip) return false;
     return this.eventIndex > 0 && this.eventIndex < this.trip.events.length - 1;
+  }
+
+  isDepartureEvent(): boolean {
+    return this.eventIndex === 0;
+  }
+
+  isArrivalEvent(): boolean {
+    if (!this.trip) return false;
+    return this.eventIndex === this.trip.events.length - 1 && this.event?.type === 'arrival';
+  }
+
+  isSpecialEvent(): boolean {
+    return this.isDepartureEvent() || this.isArrivalEvent();
+  }
+
+  canEditSpecialEvent(): boolean {
+    // We now allow editing departure events
+    return this.isDepartureEvent();
+  }
+
+  getSpecialEventMessage(): string {
+    if (this.isDepartureEvent()) {
+      return 'Departure events can be edited. Changes to odometer will affect all trip calculations.';
+    }
+    if (this.isArrivalEvent()) {
+      return 'Final arrival events have limited editing to prevent data corruption.';
+    }
+    return '';
+  }
+
+  getOdometerEditMessage(): string {
+    if (this.isArrivalEvent()) {
+      return 'Cannot edit arrival odometer to maintain trip integrity';
+    }
+    return 'Odometer editing restricted for this event type';
   }
 
   canEditGarminTotal(): boolean {
@@ -361,6 +407,12 @@ export class EditTripEventComponent implements OnInit {
 
   canEditEventType(): boolean {
     // Can only change type of middle events, not departure/arrival
+    if (!this.trip) return false;
+    return this.eventIndex > 0 && this.eventIndex < this.trip.events.length - 1;
+  }
+
+  canDeleteEvent(): boolean {
+    // Can delete middle events, but not departure or arrival
     if (!this.trip) return false;
     return this.eventIndex > 0 && this.eventIndex < this.trip.events.length - 1;
   }
@@ -429,11 +481,17 @@ export class EditTripEventComponent implements OnInit {
     
     // Check odometer constraints
     if (this.canEditOdometer()) {
-      const prevEvent = this.eventIndex > 0 ? this.trip.events[this.eventIndex - 1] : null;
-      const nextEvent = this.eventIndex < this.trip.events.length - 1 ? this.trip.events[this.eventIndex + 1] : null;
-      
-      if (prevEvent && this.editForm.odometer <= prevEvent.odometer) return false;
-      if (nextEvent && this.editForm.odometer >= nextEvent.odometer) return false;
+      if (this.isDepartureEvent()) {
+        // For departure events, just ensure it's positive
+        if (this.editForm.odometer <= 0) return false;
+      } else {
+        // For middle events, check sequence constraints
+        const prevEvent = this.eventIndex > 0 ? this.trip.events[this.eventIndex - 1] : null;
+        const nextEvent = this.eventIndex < this.trip.events.length - 1 ? this.trip.events[this.eventIndex + 1] : null;
+        
+        if (prevEvent && this.editForm.odometer <= prevEvent.odometer) return false;
+        if (nextEvent && this.editForm.odometer >= nextEvent.odometer) return false;
+      }
     }
     
     // Check fuel levels are valid
@@ -454,14 +512,20 @@ export class EditTripEventComponent implements OnInit {
     if (!this.trip || !this.event || !this.activeBoat) return 'Loading data...';
     
     if (this.canEditOdometer()) {
-      const prevEvent = this.eventIndex > 0 ? this.trip.events[this.eventIndex - 1] : null;
-      const nextEvent = this.eventIndex < this.trip.events.length - 1 ? this.trip.events[this.eventIndex + 1] : null;
-      
-      if (prevEvent && this.editForm.odometer <= prevEvent.odometer) {
-        return `Odometer must be greater than ${prevEvent.odometer}`;
-      }
-      if (nextEvent && this.editForm.odometer >= nextEvent.odometer) {
-        return `Odometer must be less than ${nextEvent.odometer}`;
+      if (this.isDepartureEvent()) {
+        if (this.editForm.odometer <= 0) {
+          return 'Departure odometer must be greater than 0';
+        }
+      } else {
+        const prevEvent = this.eventIndex > 0 ? this.trip.events[this.eventIndex - 1] : null;
+        const nextEvent = this.eventIndex < this.trip.events.length - 1 ? this.trip.events[this.eventIndex + 1] : null;
+        
+        if (prevEvent && this.editForm.odometer <= prevEvent.odometer) {
+          return `Odometer must be greater than ${prevEvent.odometer}`;
+        }
+        if (nextEvent && this.editForm.odometer >= nextEvent.odometer) {
+          return `Odometer must be less than ${nextEvent.odometer}`;
+        }
       }
     }
     
@@ -496,6 +560,23 @@ export class EditTripEventComponent implements OnInit {
         type: this.editForm.type as any
       };
       
+      // Special handling for departure odometer changes
+      if (this.isDepartureEvent() && this.editForm.odometer !== this.event.odometer) {
+        const odometerDifference = this.editForm.odometer - this.event.odometer;
+        
+        // Update all trip events to maintain relative distances
+        this.trip.events.forEach((event, index) => {
+          if (index === this.eventIndex) {
+            event.odometer = this.editForm.odometer;
+          } else {
+            event.odometer += odometerDifference;
+          }
+        });
+      } else {
+        // Regular event update
+        this.trip.events[this.eventIndex] = updatedEvent;
+      }
+      
       // If editing with Garmin total, recalculate individual levels
       if (this.canEditGarminTotal()) {
         // This is complex - we'd need to recalculate fuel distribution
@@ -516,9 +597,6 @@ export class EditTripEventComponent implements OnInit {
       }
 
       // Update the trip
-      this.trip.events[this.eventIndex] = updatedEvent;
-      
-      // Save the updated trip
       const allTrips = await this.tripService.getTrips();
       const tripIndex = allTrips.findIndex(t => t.id === this.tripId);
       if (tripIndex >= 0) {
@@ -548,7 +626,7 @@ export class EditTripEventComponent implements OnInit {
   }
 
   async deleteEvent() {
-    if (!this.trip || this.eventIndex <= 0 || this.eventIndex >= this.trip.events.length - 1) {
+    if (!this.trip || !this.canDeleteEvent()) {
       return; // Can't delete first or last event
     }
 

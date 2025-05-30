@@ -22,8 +22,7 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button defaultHref="/dashboard"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <!-- <ion-icon name="document-text-outline"></ion-icon> -->
-          Trip Details
+          {{ trip?.name || 'Trip Details' }}
         </ion-title>
         <ion-buttons slot="end">
           <ion-button (click)="showEditOptions()" fill="clear">
@@ -40,7 +39,7 @@ import { TripManagementService } from './trip-management.service';
         <ion-card-header>
           <ion-card-title>
             <ion-icon name="calendar-outline"></ion-icon>
-            {{ trip.startDate | date:'MMM d, yyyy' }}
+            {{ trip.name || (trip.startDate | date:'MMM d, yyyy') }}
           </ion-card-title>
           <ion-card-subtitle>
             {{ getTripDuration() }} • {{ trip.status | titlecase }}
@@ -48,6 +47,38 @@ import { TripManagementService } from './trip-management.service';
         </ion-card-header>
         <ion-card-content>
           <ion-list>
+            <ion-item>
+              <ion-icon name="calendar-outline" slot="start" color="primary"></ion-icon>
+              <ion-label>
+                <h3>Start Time</h3>
+                <p>{{ trip.startDate | date:'MMM d, yyyy HH:mm' }}</p>
+              </ion-label>
+            </ion-item>
+            
+            <ion-item *ngIf="trip.endDate">
+              <ion-icon name="flag-outline" slot="start" color="danger"></ion-icon>
+              <ion-label>
+                <h3>End Time</h3>
+                <p>{{ trip.endDate | date:'MMM d, yyyy HH:mm' }}</p>
+              </ion-label>
+            </ion-item>
+            
+            <ion-item>
+              <ion-icon name="speedometer-outline" slot="start" color="secondary"></ion-icon>
+              <ion-label>
+                <h3>Starting Odometer</h3>
+                <p>{{ getStartingOdometer() }} miles</p>
+              </ion-label>
+            </ion-item>
+            
+            <ion-item *ngIf="trip.endDate">
+              <ion-icon name="flag-outline" slot="start" color="tertiary"></ion-icon>
+              <ion-label>
+                <h3>Ending Odometer</h3>
+                <p>{{ getEndingOdometer() }} miles</p>
+              </ion-label>
+            </ion-item>
+            
             <ion-item>
               <ion-icon name="location-outline" slot="start" color="primary"></ion-icon>
               <ion-label>Distance Traveled</ion-label>
@@ -194,7 +225,8 @@ import { TripManagementService } from './trip-management.service';
                 fill="outline" 
                 size="small" 
                 color="primary"
-                (click)="editEvent(i)">
+                (click)="editEvent(i)"
+                *ngIf="canEditEvent(i)">
                 <ion-icon name="create-outline" slot="icon-only"></ion-icon>
               </ion-button>
             </ion-item>
@@ -237,13 +269,19 @@ export class TripDetailsComponent implements OnInit {
     await this.loadTripData();
   }
 
+  async ionViewWillEnter() {
+    await this.loadTripData();
+  }
+
   async loadTripData() {
     const trips = await this.tripService.getTrips();
-    this.trip = trips.find(t => t.id === this.tripId) || null;
-    
+    const found = trips.find(t => t.id === this.tripId) || null;
+    this.trip = found ? structuredClone(found) : null;
+
     if (this.trip) {
-      this.activeBoat = await this.boatService.getActiveBoat();
-      
+      const boat = await this.boatService.getActiveBoat();
+      this.activeBoat = boat ? structuredClone(boat) : null;
+
       try {
         this.fuelStats = await this.tripService.calculateTripStats(this.tripId);
       } catch (error) {
@@ -252,26 +290,31 @@ export class TripDetailsComponent implements OnInit {
     }
   }
 
+  trackByEventId(index: number, event: any): string | number {
+    return event.timestamp || index;
+  }
+
   getTripDuration(): string {
     if (!this.trip) return '';
-    
     const start = this.trip.startDate;
     const end = this.trip.endDate || new Date();
     const duration = end.getTime() - start.getTime();
-    
     const hours = Math.floor(duration / (1000 * 60 * 60));
     const minutes = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60));
-    
     return `${hours}h ${minutes}m`;
+  }
+
+  getStartingOdometer(): number {
+    return this.trip?.events?.[0]?.odometer || 0;
+  }
+
+  getEndingOdometer(): number {
+    return this.trip?.events?.[this.trip.events.length - 1]?.odometer || 0;
   }
 
   getTotalDistance(): number {
     if (!this.trip || this.trip.events.length < 2) return 0;
-    
-    const firstEvent = this.trip.events[0];
-    const lastEvent = this.trip.events[this.trip.events.length - 1];
-    
-    return lastEvent.odometer - firstEvent.odometer;
+    return this.getEndingOdometer() - this.getStartingOdometer();
   }
 
   getTotalFuelUsed(): number {
@@ -283,13 +326,11 @@ export class TripDetailsComponent implements OnInit {
   }
 
   getUsedTanks(): string[] {
-    if (!this.fuelStats) return [];
-    return Object.keys(this.fuelStats.usageByTank);
+    return this.fuelStats ? Object.keys(this.fuelStats.usageByTank) : [];
   }
 
   getTankName(tankId: string): string {
-    if (!this.activeBoat) return tankId;
-    const tank = this.activeBoat.tanks.find(t => t.id === tankId);
+    const tank = this.activeBoat?.tanks.find(t => t.id === tankId);
     return tank ? tank.name : tankId;
   }
 
@@ -333,45 +374,31 @@ export class TripDetailsComponent implements OnInit {
   }
 
   getTotalFuelAtEvent(event: any): number {
-    return Object.values(event.fuelLevels).reduce((sum: number, level: any) => sum + (level || 0), 0);
+    return Object.values(event.fuelLevels || {}).reduce((sum: number, val: any) => sum + (val || 0), 0);
   }
 
   getAllTankIds(): string[] {
-    if (!this.trip || this.trip.events.length === 0) return [];
-    
-    const allTankIds = new Set<string>();
-    this.trip.events.forEach(event => {
-      Object.keys(event.fuelLevels).forEach(tankId => allTankIds.add(tankId));
-    });
-    
-    return Array.from(allTankIds);
+    if (!this.trip) return [];
+    const set = new Set<string>();
+    this.trip.events.forEach(e => Object.keys(e.fuelLevels || {}).forEach(t => set.add(t)));
+    return Array.from(set);
   }
 
-  getSegmentDistance(eventIndex: number): number {
-    if (!this.trip || eventIndex === 0) return 0;
-    
-    const currentEvent = this.trip.events[eventIndex];
-    const previousEvent = this.trip.events[eventIndex - 1];
-    
-    return currentEvent.odometer - previousEvent.odometer;
+  getSegmentDistance(index: number): number {
+    if (!this.trip || index === 0) return 0;
+    return this.trip.events[index].odometer - this.trip.events[index - 1].odometer;
   }
 
-  getSegmentFuel(eventIndex: number): number {
-    if (!this.trip || eventIndex === 0) return 0;
-    
-    const currentEvent = this.trip.events[eventIndex];
-    const previousEvent = this.trip.events[eventIndex - 1];
-    
-    const prevTotal = Object.values(previousEvent.fuelLevels).reduce((sum: number, level: any) => sum + (level || 0), 0);
-    const currentTotal = Object.values(currentEvent.fuelLevels).reduce((sum: number, level: any) => sum + (level || 0), 0);
-    
-    return prevTotal - currentTotal;
+  getSegmentFuel(index: number): number {
+    if (!this.trip || index === 0) return 0;
+    const prevTotal = Object.values(this.trip.events[index - 1].fuelLevels || {}).reduce((sum: number, v: any) => sum + (v || 0), 0);
+    const currTotal = Object.values(this.trip.events[index].fuelLevels || {}).reduce((sum: number, v: any) => sum + (v || 0), 0);
+    return prevTotal - currTotal;
   }
 
-  getSegmentMPG(eventIndex: number): number {
-    const distance = this.getSegmentDistance(eventIndex);
-    const fuel = this.getSegmentFuel(eventIndex);
-    
+  getSegmentMPG(index: number): number {
+    const distance = this.getSegmentDistance(index);
+    const fuel = this.getSegmentFuel(index);
     return distance > 0 && fuel > 0 ? distance / fuel : 0;
   }
 
@@ -379,28 +406,40 @@ export class TripDetailsComponent implements OnInit {
     this.router.navigate(['/edit-trip-event', this.tripId, eventIndex]);
   }
 
+  canEditEvent(eventIndex: number): boolean {
+    return true;
+  }
+
   async showEditOptions() {
     if (!this.trip) return;
 
-    const buttons = [];
-
-    // Add edit buttons for each event
-    this.trip.events.forEach((event, index) => {
-      buttons.push({
+    const buttons = [
+      {
+        text: 'Edit Trip Details',
+        icon: 'create-outline',
+        handler: () => {
+          this.router.navigate(['/edit-trip-details', this.tripId]);
+          return true;
+        }
+      },
+      ...this.trip.events.map((event, index) => ({
         text: `Edit ${this.getEventTitle(event.type)} (${event.timestamp.toLocaleTimeString()})`,
         icon: 'create-outline',
-        handler: () => this.editEvent(index)
-      });
-    });
-
-    buttons.push({
-      text: 'Cancel',
-      icon: 'close-outline',
-      role: 'cancel'
-    });
+        handler: () => {
+          this.editEvent(index);
+          return true;
+        }
+      })),
+      {
+        text: 'Cancel',
+        icon: 'close-outline',
+        role: 'cancel',
+        handler: () => true
+      }
+    ];
 
     const actionSheet = await this.actionSheetCtrl.create({
-      header: 'Edit Trip Events',
+      header: 'Edit Options',
       buttons
     });
 

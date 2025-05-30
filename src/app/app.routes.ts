@@ -8,6 +8,7 @@ import { EventTankSwitchComponent } from './event-tank-switch.component';
 import { TripDetailsComponent } from './trip-details.component';
 import { EditTripEventComponent } from './edit-trip-event.component';
 import { TripLogComponent } from './trip-log.component';
+import { EditTripDetailsComponent } from './edit-trip-details.component';
 
 // export const routes: Routes = [
 //   // {
@@ -58,6 +59,10 @@ export const routes: Routes = [
   {
     path: 'trip-details/:id',  
     component: TripDetailsComponent
+  },
+  {
+    path: 'edit-trip-details/:id',
+    component: EditTripDetailsComponent
   },
   {
     path: 'event-tank-switch/:id',

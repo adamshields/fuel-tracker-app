@@ -27,7 +27,6 @@ import { TripManagementService } from './trip-management.service';
           </ion-button>
         </ion-buttons>
         <ion-title>
-          <!-- <ion-icon name="list-outline"></ion-icon> -->
           Trip Log
         </ion-title>
         <ion-buttons slot="end">
@@ -145,8 +144,8 @@ import { TripManagementService } from './trip-management.service';
           <ion-item color="warning" lines="none">
             <ion-icon name="time-outline" slot="start" color="dark"></ion-icon>
             <ion-label color="dark">
-              <h3>Started {{ activeTrip.startDate | date:'MMM d, HH:mm' }}</h3>
-              <p>{{ activeTrip.events.length }} events logged</p>
+              <h3>{{ getTripDisplayName(activeTrip) }}</h3>
+              <p>Started {{ activeTrip.startDate | date:'MMM d, HH:mm' }} • {{ activeTrip.events.length }} events logged</p>
             </ion-label>
           </ion-item>
           
@@ -173,8 +172,8 @@ import { TripManagementService } from './trip-management.service';
         <ion-card *ngFor="let trip of filteredTrips" class="ion-margin" [button]="true" (click)="viewTripDetails(trip.id)" [disabled]="isNavigating">
           <ion-card-header>
             <ion-card-title>
-              <ion-icon name="calendar-outline"></ion-icon>
-              {{ trip.startDate | date:'MMM d, yyyy' }}
+              <ion-icon name="boat-outline"></ion-icon>
+              {{ getTripDisplayName(trip) }}
               <ion-badge 
                 slot="end" 
                 [color]="getTripStatusColor(trip.status)"
@@ -316,13 +315,21 @@ export class TripLogComponent implements OnInit {
     private toastCtrl: ToastController,
     private actionSheetCtrl: ActionSheetController
   ) {}
-
+  
+  trackByTripId(index: number, trip: Trip): string {
+    return trip.id;
+  }
   async ngOnInit() {
     await this.loadTrips();
   }
 
   async ionViewWillEnter() {
     // Refresh data when returning to this page
+    await this.loadTrips();
+  }
+
+  async ionViewDidEnter() {
+    // Also refresh when view has fully entered
     await this.loadTrips();
   }
 
@@ -370,6 +377,7 @@ export class TripLogComponent implements OnInit {
       this.filteredTrips = this.trips.filter(trip => 
         trip.status === 'completed' && (
           trip.notes?.toLowerCase().includes(term) ||
+          trip.name?.toLowerCase().includes(term) ||
           trip.startDate.toDateString().toLowerCase().includes(term) ||
           trip.startDate.toLocaleDateString().toLowerCase().includes(term)
         )
@@ -448,6 +456,25 @@ export class TripLogComponent implements OnInit {
     return 'danger';
   }
 
+  getTripDisplayName(trip: Trip): string {
+    if (trip.name) {
+      // If trip has a name, show "Name - Date"
+      const dateStr = trip.startDate.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      return `${trip.name} - ${dateStr}`;
+    } else {
+      // If no name, just show date
+      return trip.startDate.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+  }
+
   async viewTripDetails(tripId: string) {
     if (this.isNavigating) return;
     
@@ -476,23 +503,33 @@ export class TripLogComponent implements OnInit {
           handler: () => {
             this.searchTerm = '';
             this.filterTrips();
+            return true;
           }
         },
         {
           text: 'Export Trip Data',
           icon: 'download-outline',
-          handler: () => this.exportTripData()
+          handler: () => {
+            this.exportTripData();
+            return true;
+          }
         },
         {
           text: 'Trip Statistics',
           icon: 'analytics-outline',
-          handler: () => this.showTripStatistics()
+          handler: () => {
+            this.showTripStatistics();
+            return true;
+          }
         },
         {
           text: 'Cancel',
           icon: 'close-outline',
-          role: 'cancel'
-        }
+          role: 'cancel',
+          handler: () => {
+            return true;
+          }
+        } as any
       ]
     });
 
@@ -501,29 +538,41 @@ export class TripLogComponent implements OnInit {
 
   async showTripActions(trip: Trip) {
     const actionSheet = await this.actionSheetCtrl.create({
-      header: `Trip Actions - ${trip.startDate.toLocaleDateString()}`,
+      header: `Trip Actions - ${this.getTripDisplayName(trip)}`,
       buttons: [
         {
           text: 'View Details',
           icon: 'eye-outline',
-          handler: () => this.viewTripDetails(trip.id)
+          handler: () => {
+            this.viewTripDetails(trip.id);
+            return true;
+          }
         },
         {
           text: 'Duplicate Trip',
           icon: 'copy-outline',
-          handler: () => this.duplicateTrip(trip)
+          handler: () => {
+            this.duplicateTrip(trip);
+            return true;
+          }
         },
         {
           text: 'Delete Trip',
           icon: 'trash-outline',
           role: 'destructive',
-          handler: () => this.deleteTrip(trip)
+          handler: () => {
+            this.deleteTrip(trip);
+            return true;
+          }
         },
         {
           text: 'Cancel',
           icon: 'close-outline',
-          role: 'cancel'
-        }
+          role: 'cancel',
+          handler: () => {
+            return true;
+          }
+        } as any
       ]
     });
 
@@ -531,8 +580,57 @@ export class TripLogComponent implements OnInit {
   }
 
   async duplicateTrip(trip: Trip) {
-    // Implementation for duplicating a trip (copy settings for new trip)
-    await this.showInfoToast('Trip duplication feature coming soon!');
+    if (this.isNavigating) return;
+    
+    const alert = await this.alertCtrl.create({
+      header: 'Duplicate Trip',
+      message: 'Create a new trip based on this one\'s configuration?',
+      inputs: [
+        {
+          name: 'tripName',
+          type: 'text',
+          placeholder: 'New trip name',
+          value: `${trip.name || 'Trip'} - Copy`
+        }
+      ],
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Create',
+          handler: async (data) => {
+            if (!data.tripName.trim()) {
+              await this.showErrorToast('Please enter a trip name');
+              return;
+            }
+            
+            this.isNavigating = true;
+            try {
+              const duplicatedTrip = await this.tripService.duplicateTrip(trip.id, data.tripName.trim());
+              
+              await this.showSuccessToast('Trip duplicated successfully!');
+              
+              // Navigate to the new active trip
+              await this.router.navigate(['/trip-active', duplicatedTrip.id]);
+            } catch (error) {
+              console.error('Error duplicating trip:', error);
+              
+              let errorMessage = 'Error duplicating trip';
+              if (error instanceof Error) {
+                errorMessage = error.message;
+              }
+              
+              await this.showErrorToast(errorMessage);
+            } finally {
+              setTimeout(() => {
+                this.isNavigating = false;
+              }, 1000);
+            }
+          }
+        }
+      ]
+    });
+
+    await alert.present();
   }
 
   async deleteTrip(trip: Trip) {
@@ -540,7 +638,7 @@ export class TripLogComponent implements OnInit {
     
     const alert = await this.alertCtrl.create({
       header: 'Delete Trip',
-      message: `Are you sure you want to delete the trip from ${trip.startDate.toLocaleDateString()}? This action cannot be undone.`,
+      message: `Are you sure you want to delete "${this.getTripDisplayName(trip)}"? This action cannot be undone.`,
       buttons: [
         { text: 'Cancel', role: 'cancel' },
         {

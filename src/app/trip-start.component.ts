@@ -8,7 +8,7 @@ import {
   IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle,
   IonCardContent, IonItem, IonLabel, IonInput, IonTextarea, IonNote,
   IonCheckbox, IonChip, IonButton, IonList, IonIcon, IonBadge,
-  IonItemDivider, IonProgressBar, IonAvatar, IonThumbnail
+  IonItemDivider, IonProgressBar, IonAvatar, IonThumbnail, IonDatetime
 } from '@ionic/angular/standalone';
 
 import { BoatConfig, TankConfig } from './boat.model';
@@ -18,7 +18,7 @@ import { TripManagementService } from './trip-management.service';
 @Component({
   selector: 'app-trip-start',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonInput, IonTextarea, IonNote, IonCheckbox, IonChip, IonButton, IonList, IonIcon, IonBadge, IonItemDivider,   ],
+  imports: [CommonModule, FormsModule, RouterModule, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonInput, IonTextarea, IonNote, IonCheckbox, IonChip, IonButton, IonList, IonIcon, IonBadge, IonItemDivider, IonDatetime],
   template: `
     <ion-header>
       <ion-toolbar color="primary">
@@ -26,7 +26,6 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button defaultHref="/dashboard"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <!-- <ion-icon name="play-circle-outline"></ion-icon> -->
           Start Trip
         </ion-title>
       </ion-toolbar>
@@ -34,6 +33,44 @@ import { TripManagementService } from './trip-management.service';
 
     <ion-content class="ion-padding">
       
+      <!-- Trip Basic Information -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>
+            <ion-icon name="information-circle-outline"></ion-icon>
+            Trip Information
+          </ion-card-title>
+          <ion-card-subtitle>
+            Configure trip details and start time
+          </ion-card-subtitle>
+        </ion-card-header>
+        
+        <ion-card-content>
+          <ion-list>
+            <ion-item>
+              <ion-icon name="create-outline" slot="start" color="primary"></ion-icon>
+              <ion-label position="stacked">Trip Name</ion-label>
+              <ion-input 
+                [(ngModel)]="tripName"
+                placeholder="e.g., Sandbar Trip, Wahoo Fishing Trip">
+              </ion-input>
+            </ion-item>
+
+            <ion-item>
+              <ion-icon name="calendar-outline" slot="start" color="success"></ion-icon>
+              <ion-label position="stacked">Start Date & Time</ion-label>
+              <ion-datetime 
+                [(ngModel)]="startDateTime"
+                display-format="MMM DD, YYYY HH:mm"
+                picker-format="MMM DD YYYY HH:mm"
+                [max]="maxDateTime"
+                presentation="date-time">
+              </ion-datetime>
+            </ion-item>
+          </ion-list>
+        </ion-card-content>
+      </ion-card>
+
       <!-- Fuel Configuration -->
       <ion-card *ngIf="activeBoat">
         <ion-card-header>
@@ -237,6 +274,17 @@ import { TripManagementService } from './trip-management.service';
                 {{ startingOdometer > 0 ? 'READY' : 'ERROR' }}
               </ion-badge>
             </ion-item>
+
+            <ion-item>
+              <ion-icon name="create-outline" slot="start" [color]="tripName.trim().length > 0 ? 'success' : 'warning'"></ion-icon>
+              <ion-label>
+                <h3>Trip Information</h3>
+                <p>{{ tripName.trim().length > 0 ? 'Trip name configured' : 'Trip name recommended' }}</p>
+              </ion-label>
+              <ion-badge slot="end" [color]="tripName.trim().length > 0 ? 'success' : 'warning'">
+                {{ tripName.trim().length > 0 ? 'READY' : 'OPTIONAL' }}
+              </ion-badge>
+            </ion-item>
             
             <ion-item>
               <ion-icon name="shield-checkmark-outline" slot="start" [color]="canStartTrip() ? 'success' : 'warning'"></ion-icon>
@@ -283,6 +331,9 @@ export class TripStartComponent implements OnInit {
   startingOdometer = 0;
   garminTotalFuel = 0;
   tripNotes = '';
+  tripName = '';
+  startDateTime = new Date().toISOString();
+  maxDateTime = new Date().toISOString();
 
   constructor(
     private boatService: BoatManagementService,
@@ -300,7 +351,20 @@ export class TripStartComponent implements OnInit {
         this.fuelLevels[tank.id] = tank.currentLevel;
         this.activeTanks[tank.id] = tank.currentLevel > 0; // Auto-select tanks with fuel
       });
+
+      // Generate default trip name
+      this.generateDefaultTripName();
     }
+  }
+
+  generateDefaultTripName() {
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', {
+      month: 'numeric',
+      day: 'numeric', 
+      year: 'numeric'
+    });
+    this.tripName = `Trip - ${dateStr}`;
   }
 
   getSelectedTanks(): TankConfig[] {
@@ -363,15 +427,16 @@ export class TripStartComponent implements OnInit {
     try {
       // Create the departure event
       const selectedTankIds = this.getSelectedTanks().map(tank => tank.id);
+      const startDate = new Date(this.startDateTime);
       
       const trip = await this.tripService.startTrip(this.activeBoat.id, {
-        timestamp: new Date(),
+        timestamp: startDate,
         type: 'departure',
         odometer: this.startingOdometer,
         fuelLevels: this.fuelLevels,
         activeTanks: selectedTankIds,
         notes: this.tripNotes || undefined
-      });
+      }, this.tripName.trim() || undefined, startDate);
 
       // Update boat tank levels if they've changed
       for (const tank of this.activeBoat.tanks) {
