@@ -113,7 +113,7 @@ import { TripManagementService } from './trip-management.service';
                 <p>Enter fuel level for each tank</p>
               </ion-label>
             </ion-item>
-            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
+            <ion-item *ngFor="let tank of activeBoat.tanks">
               <ion-icon name="water-outline" slot="start" color="primary"></ion-icon>
               <ion-label position="stacked">{{ tank.name }}</ion-label>
               <ion-input 
@@ -135,8 +135,7 @@ import { TripManagementService } from './trip-management.service';
                 <p>Select tanks that were active at this event</p>
               </ion-label>
             </ion-item>
-            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
-
+            <ion-item *ngFor="let tank of activeBoat.tanks">
               <ion-checkbox 
                 slot="start" 
                 [(ngModel)]="editForm.activeTanks[tank.id]"
@@ -288,11 +287,7 @@ export class EditTripEventComponent implements OnInit {
     private toastCtrl: ToastController,
     private alertCtrl: AlertController
   ) {}
-  
-  trackByTankId(index: number, tank: { id: string }) {
-    return tank.id;
-  }
-  
+
   async ngOnInit() {
     this.tripId = this.route.snapshot.paramMap.get('tripId')!;
     this.eventIndex = parseInt(this.route.snapshot.paramMap.get('eventIndex')!, 10);
@@ -611,7 +606,7 @@ export class EditTripEventComponent implements OnInit {
       });
       await toast.present();
 
-      this.router.navigate(['/trip-details', this.tripId]);
+      this.router.navigate(['/trip-details', this.tripId], { replaceUrl: true });
 
     } catch (error) {
       console.error('Error updating event:', error);
@@ -658,7 +653,7 @@ export class EditTripEventComponent implements OnInit {
               });
               await toast.present();
 
-              this.router.navigate(['/trip-details', this.tripId]);
+              this.router.navigate(['/trip-details', this.tripId], { replaceUrl: true });
 
             } catch (error) {
               console.error('Error deleting event:', error);

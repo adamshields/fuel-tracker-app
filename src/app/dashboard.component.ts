@@ -9,9 +9,13 @@ import {
   IonList, IonBadge, IonItemDivider, IonChip, IonAvatar, IonThumbnail
 } from '@ionic/angular/standalone';
 
-import { BoatConfig, TankConfig, Trip } from './boat.model';
+import { BoatConfig, Trip } from './boat.model';
 import { BoatManagementService } from './boat-management.service';
 import { TripManagementService } from './trip-management.service';
+import { Preferences } from '@capacitor/preferences';
+
+
+
 
 @Component({
   selector: 'app-dashboard',
@@ -118,7 +122,7 @@ import { TripManagementService } from './trip-management.service';
               <ion-label>Tank Details</ion-label>
             </ion-item-divider>
             
-            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
+            <ion-item *ngFor="let tank of activeBoat.tanks">
               <ion-icon 
                 [name]="getTankIcon(tank.type)" 
                 slot="start"
@@ -304,6 +308,7 @@ export class DashboardComponent implements OnInit {
   totalFuel = 0;
   totalCapacity = 0;
   
+  // Loading states
   isLoading = false;
   isNavigating = false;
 
@@ -317,31 +322,33 @@ export class DashboardComponent implements OnInit {
   ) {}
 
   async ngOnInit() {
+    // await Preferences.clear();
     await this.loadData();
   }
 
   async ionViewWillEnter() {
+    // Always refresh when returning to dashboard
     await this.loadData();
   }
 
   async loadData() {
     this.isLoading = true;
     try {
-      const boat = await this.boatService.getActiveBoat();
-      this.activeBoat = boat ? structuredClone(boat) : null;
-
+      this.activeBoat = await this.boatService.getActiveBoat();
+      
       if (this.activeBoat) {
         this.totalFuel = await this.boatService.getTotalFuel(this.activeBoat.id);
         this.totalCapacity = await this.boatService.getTotalCapacity(this.activeBoat.id);
       }
 
       this.activeTrip = await this.tripService.getActiveTrip();
-
+      
       const allTrips = await this.tripService.getTrips();
+      // Limit recent trips to only 4
       this.recentTrips = allTrips
         .filter(trip => trip.status === 'completed')
         .sort((a, b) => b.startDate.getTime() - a.startDate.getTime())
-        .slice(0, 4);
+        .slice(0, 4); // Changed from 5 to 4
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       await this.showErrorToast('Failed to load dashboard data');
@@ -350,35 +357,35 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  trackByTankId(index: number, tank: TankConfig): string {
-    return tank.id;
-  }
-
   async startTrip() {
-    if (!this.activeBoat || this.totalFuel <= 0 || this.isNavigating) return;
-
+    if (!this.activeBoat || this.totalFuel <= 0 || this.isNavigating) {
+      return;
+    }
+    
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/trip-start']);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/trip-start'], { replaceUrl: true });
     } catch (error) {
       console.error('Error navigating to trip start:', error);
       await this.showErrorToast('Failed to navigate to trip start');
-    } finally {
-      setTimeout(() => (this.isNavigating = false), 1000);
+      this.isNavigating = false; // Reset on error
     }
   }
 
   async continueTrip() {
     if (!this.activeTrip || this.isNavigating) return;
-
+    
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/trip-active', this.activeTrip.id]);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/trip-active', this.activeTrip.id], { replaceUrl: true });
     } catch (error) {
       console.error('Error navigating to active trip:', error);
       await this.showErrorToast('Failed to navigate to active trip');
-    } finally {
-      setTimeout(() => (this.isNavigating = false), 1000);
+      this.isNavigating = false; // Reset on error
     }
   }
 
@@ -395,12 +402,13 @@ export class DashboardComponent implements OnInit {
           handler: async () => {
             this.isNavigating = true;
             try {
-              await this.router.navigate(['/trip-complete', this.activeTrip!.id]);
+              // Reset loading state before navigation
+              this.isNavigating = false;
+              this.router.navigate(['/trip-complete', this.activeTrip!.id], { replaceUrl: true });
             } catch (error) {
               console.error('Error ending trip:', error);
               await this.showErrorToast('Failed to navigate to trip completion');
-            } finally {
-              setTimeout(() => (this.isNavigating = false), 1000);
+              this.isNavigating = false; // Reset on error
             }
           }
         }
@@ -410,44 +418,44 @@ export class DashboardComponent implements OnInit {
     await alert.present();
   }
 
+  calculateTripDistance(trip: Trip): number {
+    if (trip.events.length < 2) return 0;
+    
+    const firstEvent = trip.events[0];
+    const lastEvent = trip.events[trip.events.length - 1];
+    
+    return lastEvent.odometer - firstEvent.odometer;
+  }
+
   async viewTrip(tripId: string) {
     if (this.isNavigating) return;
-
+    
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/trip-details', tripId]);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/trip-details', tripId], { replaceUrl: true });
     } catch (error) {
       console.error('Error navigating to trip details:', error);
       await this.showErrorToast('Failed to open trip details');
-    } finally {
-      setTimeout(() => (this.isNavigating = false), 1000);
+      this.isNavigating = false; // Reset on error
     }
-  }
-
-  calculateTripDistance(trip: Trip): number {
-    if (trip.events.length < 2) return 0;
-    return trip.events[trip.events.length - 1].odometer - trip.events[0].odometer;
   }
 
   private async showErrorToast(message: string) {
     const toast = await this.toastCtrl.create({
-      message,
+      message: message,
       duration: 3000,
       color: 'danger',
       position: 'bottom',
-      buttons: [{ text: 'Dismiss', role: 'cancel' }]
+      buttons: [
+        {
+          text: 'Dismiss',
+          role: 'cancel'
+        }
+      ]
     });
     await toast.present();
-  }
-
-  getFuelPercentage(): number {
-    if (this.totalCapacity === 0) return 0;
-    return Math.round((this.totalFuel / this.totalCapacity) * 100);
-  }
-
-  getTankPercentage(tank: TankConfig): number {
-    if (tank.capacity === 0) return 0;
-    return Math.round((tank.currentLevel / tank.capacity) * 100);
   }
 
   getTotalFuelColor(): string {
@@ -471,6 +479,16 @@ export class DashboardComponent implements OnInit {
       case 'aux': return 'Auxiliary';
       default: return type;
     }
+  }
+
+  getFuelPercentage(): number {
+    if (this.totalCapacity === 0) return 0;
+    return Math.round((this.totalFuel / this.totalCapacity) * 100);
+  }
+
+  getTankPercentage(tank: any): number {
+    if (tank.capacity === 0) return 0;
+    return Math.round((tank.currentLevel / tank.capacity) * 100);
   }
 
   getTankIcon(type: string): string {

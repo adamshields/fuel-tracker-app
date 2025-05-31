@@ -26,7 +26,6 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button [defaultHref]="'/trip-active/' + tripId"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <!-- <ion-icon name="flag-outline"></ion-icon> -->
           Complete Trip
         </ion-title>
       </ion-toolbar>
@@ -205,10 +204,10 @@ import { TripManagementService } from './trip-management.service';
             expand="block" 
             color="success"
             (click)="completeTrip()"
-            [disabled]="!canCompleteTrip()"
+            [disabled]="!canCompleteTrip() || isCompletingTrip"
             class="ion-margin-bottom">
-            <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
-            Complete Trip
+            <ion-icon [name]="isCompletingTrip ? 'hourglass-outline' : 'checkmark-circle-outline'" slot="start"></ion-icon>
+            {{ isCompletingTrip ? 'Completing Trip...' : 'Complete Trip' }}
           </ion-button>
           
           <ion-item *ngIf="!canCompleteTrip()" lines="none" color="warning">
@@ -284,6 +283,9 @@ export class TripCompleteComponent implements OnInit {
   finalOdometer = 0;
   finalGarminTotal = 0;
   finalNotes = '';
+  
+  // Loading state
+  isCompletingTrip = false;
   
   // Expose Math to template
   Math = Math;
@@ -474,8 +476,9 @@ export class TripCompleteComponent implements OnInit {
   }
 
   async completeTrip() {
-    if (!this.trip || !this.canCompleteTrip()) return;
-
+    if (!this.trip || !this.canCompleteTrip() || this.isCompletingTrip) return;
+  
+    this.isCompletingTrip = true;
     try {
       // Use the new Garmin-based method
       await this.tripService.addTripEventWithGarmin(this.tripId, {
@@ -486,17 +489,20 @@ export class TripCompleteComponent implements OnInit {
         activeTanks: [], // No active tanks when docked
         notes: this.finalNotes || undefined
       });
-
+  
       const toast = await this.toastCtrl.create({
         message: 'Trip completed successfully!',
         duration: 3000,
         color: 'success'
       });
       await toast.present();
-
-      // Navigate to trip summary or dashboard
-      this.router.navigate(['/dashboard']);
-
+  
+      // Reset loading state before navigation
+      this.isCompletingTrip = false;
+  
+      // Navigate to dashboard using replace to prevent back button issues
+      this.router.navigate(['/dashboard'], { replaceUrl: true });
+  
     } catch (error) {
       console.error('Error completing trip:', error);
       
@@ -506,6 +512,9 @@ export class TripCompleteComponent implements OnInit {
         color: 'danger'
       });
       await toast.present();
+      
+      // Reset loading state on error
+      this.isCompletingTrip = false;
     }
   }
 }

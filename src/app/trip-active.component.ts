@@ -16,15 +16,14 @@ import { TripManagementService } from './trip-management.service';
 @Component({
   selector: 'app-trip-active',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonProgressBar, IonBadge, IonChip, IonNote, IonList,  IonItemDivider],
+  imports: [CommonModule, FormsModule, RouterModule, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonProgressBar, IonBadge, IonChip, IonNote, IonList,  IonItemDivider],
   template: `
     <ion-header>
       <ion-toolbar color="primary">
         <ion-buttons slot="start">
-          <ion-back-button 
-            [defaultHref]="'/dashboard'"
-            (click)="navigateBack($event)">
-          </ion-back-button>
+          <ion-button routerLink="/dashboard" fill="clear">
+            <ion-icon name="home-outline" slot="icon-only"></ion-icon>
+          </ion-button>
         </ion-buttons>
         <ion-title>
           Active Trip
@@ -94,7 +93,7 @@ import { TripManagementService } from './trip-management.service';
               <ion-badge slot="end" color="success">LIVE</ion-badge>
             </ion-item-divider>
             
-            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId">
+            <ion-item *ngFor="let tank of activeBoat.tanks">
               <ion-icon 
                 [name]="getTankIcon(tank.id)" 
                 slot="start"
@@ -279,7 +278,7 @@ import { TripManagementService } from './trip-management.service';
             fill="outline" 
             color="primary"
             [disabled]="isNavigating"
-            (click)="navigateToDashboard()">
+            routerLink="/dashboard">
             <ion-icon name="home-outline" slot="start"></ion-icon>
             Return to Dashboard
           </ion-button>
@@ -308,10 +307,6 @@ export class TripActiveComponent implements OnInit {
     private toastCtrl: ToastController
   ) {}
 
-  trackByTankId(index: number, tank: { id: string }): string {
-    return tank.id;
-  }
-  
   async ngOnInit() {
     this.tripId = this.route.snapshot.paramMap.get('id')!;
     await this.loadTripData();
@@ -321,11 +316,6 @@ export class TripActiveComponent implements OnInit {
     // Refresh data when returning from event pages
     await this.loadTripData();
   }
-
-  // async ionViewDidEnter() {
-  //   // Also refresh when view has fully entered
-  //   await this.loadTripData();
-  // }
 
   async loadTripData() {
     this.isLoading = true;
@@ -341,28 +331,6 @@ export class TripActiveComponent implements OnInit {
       await this.showErrorToast('Failed to load trip data');
     } finally {
       this.isLoading = false;
-    }
-  }
-
-  // Fix back button navigation
-  navigateBack(event: Event) {
-    event.preventDefault();
-    this.navigateToDashboard();
-  }
-
-  async navigateToDashboard() {
-    if (this.isNavigating) return;
-    
-    this.isNavigating = true;
-    try {
-      await this.router.navigate(['/dashboard']);
-    } catch (error) {
-      console.error('Error navigating to dashboard:', error);
-      await this.showErrorToast('Failed to navigate to dashboard');
-    } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
     }
   }
 
@@ -550,53 +518,61 @@ export class TripActiveComponent implements OnInit {
     
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/event-tank-switch', this.tripId]);
-    } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/event-tank-switch', this.tripId], { replaceUrl: true });
+    } catch (error) {
+      console.error('Error navigating to tank switch:', error);
+      await this.showErrorToast('Failed to navigate to tank switch');
+      this.isNavigating = false; // Reset on error
     }
   }
-
+  
   async addActivityChange() {
     if (this.isNavigating) return;
     
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/event-activity', this.tripId]);
-    } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/event-activity', this.tripId], { replaceUrl: true });
+    } catch (error) {
+      console.error('Error navigating to activity change:', error);
+      await this.showErrorToast('Failed to navigate to activity change');
+      this.isNavigating = false; // Reset on error
     }
   }
-
+  
   async addFuelStop() {
     if (this.isNavigating) return;
     
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/event-fuel-stop', this.tripId]);
-    } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/event-fuel-stop', this.tripId], { replaceUrl: true });
+    } catch (error) {
+      console.error('Error navigating to fuel stop:', error);
+      await this.showErrorToast('Failed to navigate to fuel stop');
+      this.isNavigating = false; // Reset on error
     }
   }
-
+  
   async addGeneralNote() {
     if (this.isNavigating) return;
     
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/event-note', this.tripId]);
-    } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/event-note', this.tripId], { replaceUrl: true });
+    } catch (error) {
+      console.error('Error navigating to general note:', error);
+      await this.showErrorToast('Failed to navigate to general note');
+      this.isNavigating = false; // Reset on error
     }
   }
-
+  
   async endTrip() {
     if (this.isNavigating) return;
     
@@ -610,36 +586,37 @@ export class TripActiveComponent implements OnInit {
           handler: async () => {
             this.isNavigating = true;
             try {
-              await this.router.navigate(['/trip-complete', this.tripId]);
+              // Reset loading state before navigation
+              this.isNavigating = false;
+              this.router.navigate(['/trip-complete', this.tripId], { replaceUrl: true });
             } catch (error) {
               console.error('Error navigating to trip completion:', error);
               await this.showErrorToast('Failed to navigate to trip completion');
-            } finally {
-              setTimeout(() => {
-                this.isNavigating = false;
-              }, 1000);
+              this.isNavigating = false; // Reset on error
             }
           }
         }
       ]
     });
-
+  
     await alert.present();
   }
-
+  
   async editEvent(eventIndex: number) {
     if (this.isNavigating) return;
     
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/edit-trip-event', this.tripId, eventIndex]);
-    } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/edit-trip-event', this.tripId, eventIndex]);
+    } catch (error) {
+      console.error('Error navigating to edit event:', error);
+      await this.showErrorToast('Failed to navigate to edit event');
+      this.isNavigating = false; // Reset on error
     }
   }
-
+  
   private async showErrorToast(message: string) {
     const toast = await this.toastCtrl.create({
       message: message,

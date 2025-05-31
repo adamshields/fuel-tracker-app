@@ -67,7 +67,7 @@ import { BoatManagementService } from './boat-management.service';
               <ion-label>Tank Details</ion-label>
             </ion-item-divider>
             
-            <ion-item *ngFor="let tank of activeBoat.tanks; trackBy: trackByTankId" button>
+            <ion-item *ngFor="let tank of activeBoat.tanks" button>
               <ion-icon 
                 name="water-outline" 
                 slot="start" 
@@ -91,9 +91,9 @@ import { BoatManagementService } from './boat-management.service';
                 fill="outline" 
                 size="small" 
                 color="primary"
-                [disabled]="isUpdatingTank"
+                [disabled]="updatingTanks[tank.id]"
                 (click)="updateTankLevel(tank)">
-                <ion-icon [name]="isUpdatingTank ? 'hourglass-outline' : 'create-outline'" slot="icon-only"></ion-icon>
+                <ion-icon [name]="updatingTanks[tank.id] ? 'hourglass-outline' : 'create-outline'" slot="icon-only"></ion-icon>
               </ion-button>
             </ion-item>
           </ion-list>
@@ -332,15 +332,16 @@ export class BoatSetupComponent implements OnInit {
   activeBoat: BoatConfig | null = null;
   totalFuel = 0;
   totalCapacity = 0;
-
+  
+  // Loading states
   isLoading = false;
   isAddingBoat = false;
   isAddingTank = false;
-  isUpdatingTank = false;
-
+  updatingTanks: { [tankId: string]: boolean } = {};
+  
   showAddBoatForm = false;
   showAddTankForm = false;
-
+  
   newBoat = { name: '' };
   newTank = {
     name: '',
@@ -366,14 +367,16 @@ export class BoatSetupComponent implements OnInit {
     await this.loadBoatInfo();
   }
 
+  async ionViewDidEnter() {
+    // Also refresh when view has fully entered
+    await this.loadBoatInfo();
+  }
+
   async loadBoatInfo() {
     this.isLoading = true;
     try {
-      const boat = await this.boatService.getActiveBoat();
-
-      // Force new object reference
-      this.activeBoat = boat ? structuredClone(boat) : null;
-
+      this.activeBoat = await this.boatService.getActiveBoat();
+      
       if (this.activeBoat) {
         this.totalFuel = await this.boatService.getTotalFuel(this.activeBoat.id);
         this.totalCapacity = await this.boatService.getTotalCapacity(this.activeBoat.id);
@@ -386,13 +389,9 @@ export class BoatSetupComponent implements OnInit {
     }
   }
 
-  trackByTankId(index: number, tank: TankConfig): string {
-    return tank.id;
-  }
-
   async addBoat() {
     if (this.isAddingBoat || !this.newBoat.name.trim()) return;
-
+    
     this.isAddingBoat = true;
     try {
       await this.boatService.addBoat({
@@ -400,13 +399,15 @@ export class BoatSetupComponent implements OnInit {
         tanks: [],
         isActive: true
       });
-
-      // Auto-refresh data
+      
+      // Force refresh data after adding boat
       await this.loadBoatInfo();
-
+      
       // Close form and reset
       this.cancelAddBoat();
+      
       await this.showSuccessToast('Boat added successfully!');
+      
     } catch (error) {
       console.error('Error adding boat:', error);
       await this.showErrorToast('Failed to add boat. Please try again.');
@@ -432,7 +433,7 @@ export class BoatSetupComponent implements OnInit {
         currentLevel: this.newTank.currentLevel
       });
       
-      // Auto-refresh data
+      // Force refresh data after adding tank
       await this.loadBoatInfo();
       
       // Close form and reset
@@ -459,18 +460,16 @@ export class BoatSetupComponent implements OnInit {
   }
 
   canAddTank(): boolean {
-    return !!(
-      this.newTank.name.trim() &&
-      this.newTank.type &&
-      this.newTank.capacity > 0 &&
-      this.newTank.currentLevel >= 0 &&
-      this.newTank.currentLevel <= this.newTank.capacity
-    );
+    return !!(this.newTank.name.trim() && 
+              this.newTank.type && 
+              this.newTank.capacity > 0 && 
+              this.newTank.currentLevel >= 0 &&
+              this.newTank.currentLevel <= this.newTank.capacity);
   }
 
   async updateTankLevel(tank: TankConfig) {
-    if (this.isUpdatingTank) return;
-
+    if (this.updatingTanks[tank.id]) return;
+    
     const alert = await this.alertCtrl.create({
       header: `Update ${tank.name}`,
       message: 'Enter the current fuel level',
@@ -485,41 +484,53 @@ export class BoatSetupComponent implements OnInit {
         }
       ],
       buttons: [
-        { text: 'Cancel', role: 'cancel' },
+        { 
+          text: 'Cancel', 
+          role: 'cancel'
+        },
         {
           text: 'Update',
-          handler: async (data) => {
+          handler: (data) => {
             const newLevel = parseFloat(data.level);
+            // ✅ blur active element to avoid aria-hidden warning
+            // (document.activeElement as HTMLElement)?.blur();
+        
             if (newLevel >= 0 && newLevel <= tank.capacity) {
-              await this.performTankUpdate(tank, newLevel);
+              this.performTankUpdate(tank, newLevel);
+              return true; // closes modal
             } else {
-              await this.showErrorToast('Invalid fuel level entered');
+              this.showErrorToast('Invalid fuel level entered');
+              return false; // keeps modal open
             }
           }
         }
+        
       ]
     });
-
+    
     await alert.present();
   }
 
   private async performTankUpdate(tank: TankConfig, newLevel: number) {
-    this.isUpdatingTank = true;
+    this.updatingTanks[tank.id] = true;
     try {
       await this.boatService.updateTankLevel(this.activeBoat!.id, tank.id, newLevel);
+      
+      // Force refresh data after updating tank
       await this.loadBoatInfo();
+      
       await this.showSuccessToast('Tank level updated successfully!');
     } catch (error) {
       console.error('Error updating tank level:', error);
       await this.showErrorToast('Failed to update tank level');
     } finally {
-      this.isUpdatingTank = false;
+      this.updatingTanks[tank.id] = false;
     }
   }
 
   private async showSuccessToast(message: string) {
     const toast = await this.toastCtrl.create({
-      message,
+      message: message,
       duration: 2000,
       color: 'success',
       position: 'bottom'
@@ -529,11 +540,16 @@ export class BoatSetupComponent implements OnInit {
 
   private async showErrorToast(message: string) {
     const toast = await this.toastCtrl.create({
-      message,
+      message: message,
       duration: 3000,
       color: 'danger',
       position: 'bottom',
-      buttons: [{ text: 'Dismiss', role: 'cancel' }]
+      buttons: [
+        {
+          text: 'Dismiss',
+          role: 'cancel'
+        }
+      ]
     });
     await toast.present();
   }

@@ -24,7 +24,6 @@ import { TripManagementService } from './trip-management.service';
           <ion-back-button [defaultHref]="'/trip-active/' + tripId"></ion-back-button>
         </ion-buttons>
         <ion-title>
-          <!-- <ion-icon name="swap-horizontal-outline"></ion-icon> -->
           Tank Switch
         </ion-title>
       </ion-toolbar>
@@ -348,7 +347,7 @@ export class EventTankSwitchComponent implements OnInit {
 
   async logTankSwitch() {
     if (!this.canLogSwitch() || this.isLogging) return;
-
+  
     this.isLogging = true;
     try {
       await this.tripService.addTripEventWithGarmin(this.tripId, {
@@ -359,16 +358,20 @@ export class EventTankSwitchComponent implements OnInit {
         activeTanks: this.getSelectedTanks(),
         activity: this.switchReason || undefined
       });
-
+  
       await this.showSuccessToast('Tank switch logged successfully!');
-
-      // Navigate back to active trip
-      await this.router.navigate(['/trip-active', this.tripId]);
-
+  
+      // Reset loading state before navigation
+      this.isLogging = false;
+  
+      // Navigate back to active trip using replaceUrl to prevent back button issues
+      this.router.navigate(['/trip-active', this.tripId], { replaceUrl: true });
+  
     } catch (error) {
       console.error('Error logging tank switch:', error);
       await this.showErrorToast('Error logging event. Please try again.');
-    } finally {
+      
+      // Reset loading state on error
       this.isLogging = false;
     }
   }

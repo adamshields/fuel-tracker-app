@@ -315,10 +315,7 @@ export class TripLogComponent implements OnInit {
     private toastCtrl: ToastController,
     private actionSheetCtrl: ActionSheetController
   ) {}
-  
-  trackByTripId(index: number, trip: Trip): string {
-    return trip.id;
-  }
+
   async ngOnInit() {
     await this.loadTrips();
   }
@@ -480,14 +477,13 @@ export class TripLogComponent implements OnInit {
     
     this.isNavigating = true;
     try {
-      await this.router.navigate(['/trip-details', tripId]);
+      // Reset loading state before navigation
+      this.isNavigating = false;
+      this.router.navigate(['/trip-details', tripId], { replaceUrl: true });
     } catch (error) {
       console.error('Error navigating to trip details:', error);
       await this.showErrorToast('Failed to open trip details');
-    } finally {
-      setTimeout(() => {
-        this.isNavigating = false;
-      }, 1000);
+      this.isNavigating = false; // Reset on error
     }
   }
 
@@ -579,59 +575,59 @@ export class TripLogComponent implements OnInit {
     await actionSheet.present();
   }
 
-  async duplicateTrip(trip: Trip) {
-    if (this.isNavigating) return;
-    
-    const alert = await this.alertCtrl.create({
-      header: 'Duplicate Trip',
-      message: 'Create a new trip based on this one\'s configuration?',
-      inputs: [
-        {
-          name: 'tripName',
-          type: 'text',
-          placeholder: 'New trip name',
-          value: `${trip.name || 'Trip'} - Copy`
-        }
-      ],
-      buttons: [
-        { text: 'Cancel', role: 'cancel' },
-        {
-          text: 'Create',
-          handler: async (data) => {
-            if (!data.tripName.trim()) {
-              await this.showErrorToast('Please enter a trip name');
-              return;
+async duplicateTrip(trip: Trip) {
+  if (this.isNavigating) return;
+  
+  const alert = await this.alertCtrl.create({
+    header: 'Duplicate Trip',
+    message: 'Create a new trip based on this one\'s configuration?',
+    inputs: [
+      {
+        name: 'tripName',
+        type: 'text',
+        placeholder: 'New trip name',
+        value: `${trip.name || 'Trip'} - Copy`
+      }
+    ],
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Create',
+        handler: async (data) => {
+          if (!data.tripName.trim()) {
+            await this.showErrorToast('Please enter a trip name');
+            return;
+          }
+          
+          this.isNavigating = true;
+          try {
+            const duplicatedTrip = await this.tripService.duplicateTrip(trip.id, data.tripName.trim());
+            
+            await this.showSuccessToast('Trip duplicated successfully!');
+            
+            // Reset loading state before navigation
+            this.isNavigating = false;
+            
+            // Navigate to the new active trip
+            this.router.navigate(['/trip-active', duplicatedTrip.id], { replaceUrl: true });
+          } catch (error) {
+            console.error('Error duplicating trip:', error);
+            
+            let errorMessage = 'Error duplicating trip';
+            if (error instanceof Error) {
+              errorMessage = error.message;
             }
             
-            this.isNavigating = true;
-            try {
-              const duplicatedTrip = await this.tripService.duplicateTrip(trip.id, data.tripName.trim());
-              
-              await this.showSuccessToast('Trip duplicated successfully!');
-              
-              // Navigate to the new active trip
-              await this.router.navigate(['/trip-active', duplicatedTrip.id]);
-            } catch (error) {
-              console.error('Error duplicating trip:', error);
-              
-              let errorMessage = 'Error duplicating trip';
-              if (error instanceof Error) {
-                errorMessage = error.message;
-              }
-              
-              await this.showErrorToast(errorMessage);
-            } finally {
-              setTimeout(() => {
-                this.isNavigating = false;
-              }, 1000);
-            }
+            await this.showErrorToast(errorMessage);
+            this.isNavigating = false; // Reset on error
           }
         }
-      ]
-    });
+      }
+    ]
+  });
 
-    await alert.present();
-  }
+  await alert.present();
+}
 
   async deleteTrip(trip: Trip) {
     if (this.isDeleting) return;

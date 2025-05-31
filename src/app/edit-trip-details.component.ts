@@ -15,7 +15,7 @@ import { TripManagementService } from './trip-management.service';
 @Component({
   selector: 'app-edit-trip-details',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, IonHeader,IonNote, IonToolbar, IonTitle, IonButtons, IonBackButton, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonInput, IonTextarea, IonButton, IonDatetime, IonIcon],
+  imports: [CommonModule, FormsModule, RouterModule, IonNote, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonContent, IonCard, IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent, IonItem, IonLabel, IonInput, IonTextarea, IonButton, IonDatetime, IonIcon],
   template: `
     <ion-header>
       <ion-toolbar color="primary">
@@ -158,122 +158,126 @@ import { TripManagementService } from './trip-management.service';
   `
 })
 export class EditTripDetailsComponent implements OnInit {
-    trip: Trip | null = null;
-    tripId!: string;
-    isSaving = false;
+  trip: Trip | null = null;
+  tripId!: string;
+  isSaving = false;
   
-    editForm = {
-      name: '',
-      startDate: '',
-      endDate: '',
-      startingOdometer: 0,
-      notes: ''
-    };
+  editForm = {
+    name: '',
+    startDate: '',
+    endDate: '',
+    startingOdometer: 0,
+    notes: ''
+  };
   
-    originalForm = {
-      name: '',
-      startDate: '',
-      endDate: '',
-      startingOdometer: 0,
-      notes: ''
-    };
-  
-    constructor(
-      private route: ActivatedRoute,
-      private router: Router,
-      private tripService: TripManagementService,
-      private toastCtrl: ToastController
-    ) {}
-  
-    async ngOnInit() {
-      this.tripId = this.route.snapshot.paramMap.get('id')!;
-      await this.loadTripData();
-    }
-  
-    async loadTripData() {
-      const trips = await this.tripService.getTrips();
-      const found = trips.find(t => t.id === this.tripId);
-      this.trip = found ? structuredClone(found) : null;
-  
-      if (this.trip) {
-        this.editForm = {
-          name: this.trip.name || '',
-          startDate: this.trip.startDate.toISOString(),
-          endDate: this.trip.endDate ? this.trip.endDate.toISOString() : '',
-          startingOdometer: this.trip.events.length > 0 ? this.trip.events[0].odometer : 0,
-          notes: this.trip.notes || ''
-        };
-  
-        this.originalForm = JSON.parse(JSON.stringify(this.editForm));
-      }
-    }
-  
-    hasChanges(): boolean {
-      return JSON.stringify(this.editForm) !== JSON.stringify(this.originalForm);
-    }
-  
-    async saveChanges() {
-      if (!this.trip || !this.hasChanges() || this.isSaving) return;
-  
-      this.isSaving = true;
-      try {
-        const updates: any = {};
-  
-        if (this.editForm.name !== this.originalForm.name) {
-          updates.name = this.editForm.name.trim();
-        }
-  
-        if (this.editForm.startDate !== this.originalForm.startDate) {
-          updates.startDate = new Date(this.editForm.startDate);
-        }
-  
-        if (this.editForm.endDate !== this.originalForm.endDate) {
-          updates.endDate = this.editForm.endDate ? new Date(this.editForm.endDate) : undefined;
-        }
-  
-        if (this.editForm.notes !== this.originalForm.notes) {
-          updates.notes = this.editForm.notes.trim();
-        }
-  
-        if (this.editForm.startingOdometer !== this.originalForm.startingOdometer) {
-          updates.startingOdometer = this.editForm.startingOdometer;
-        }
-  
-        await this.tripService.updateTripDetails(this.tripId, updates);
-  
-        const toast = await this.toastCtrl.create({
-          message: 'Trip details updated successfully!',
-          duration: 2000,
-          color: 'success'
-        });
-        await toast.present();
-  
-        // Reload trip details properly
-        await this.router.navigateByUrl('/', { skipLocationChange: true });
-        await this.router.navigate(['/trip-details', this.tripId]);
-  
-      } catch (error) {
-        console.error('Error updating trip details:', error);
-  
-        const toast = await this.toastCtrl.create({
-          message: 'Error updating trip details. Please try again.',
-          duration: 3000,
-          color: 'danger'
-        });
-        await toast.present();
-      } finally {
-        this.isSaving = false;
-      }
-    }
-  
-    editDepartureEvent() {
-      if (!this.trip) return;
-      this.router.navigate(['/edit-trip-event', this.tripId, 0]);
-    }
-  
-    editArrivalEvent() {
-      if (!this.trip) return;
-      const lastIndex = this.trip.events.length - 1;
-      this.router.navigate(['/edit-trip-event', this.tripId, lastIndex]);
+  originalForm = {
+    name: '',
+    startDate: '',
+    endDate: '',
+    startingOdometer: 0,
+    notes: ''
+  };
+
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private tripService: TripManagementService,
+    private toastCtrl: ToastController
+  ) {}
+
+  async ngOnInit() {
+    this.tripId = this.route.snapshot.paramMap.get('id')!;
+    await this.loadTripData();
+  }
+
+  async loadTripData() {
+    const trips = await this.tripService.getTrips();
+    this.trip = trips.find(t => t.id === this.tripId) || null;
+    
+    if (this.trip) {
+      // Initialize form with current trip data
+      this.editForm = {
+        name: this.trip.name || '',
+        startDate: this.trip.startDate.toISOString(),
+        endDate: this.trip.endDate ? this.trip.endDate.toISOString() : '',
+        startingOdometer: this.trip.events.length > 0 ? this.trip.events[0].odometer : 0,
+        notes: this.trip.notes || ''
+      };
+      
+      // Store original values for comparison
+      this.originalForm = { ...this.editForm };
     }
   }
+
+  hasChanges(): boolean {
+    return JSON.stringify(this.editForm) !== JSON.stringify(this.originalForm);
+  }
+
+  async saveChanges() {
+    if (!this.trip || !this.hasChanges() || this.isSaving) return;
+  
+    this.isSaving = true;
+    try {
+      const updates: any = {};
+      
+      if (this.editForm.name !== this.originalForm.name) {
+        updates.name = this.editForm.name.trim() || undefined;
+      }
+      
+      if (this.editForm.startDate !== this.originalForm.startDate) {
+        updates.startDate = new Date(this.editForm.startDate);
+      }
+      
+      if (this.editForm.endDate !== this.originalForm.endDate) {
+        updates.endDate = this.editForm.endDate ? new Date(this.editForm.endDate) : undefined;
+      }
+      
+      if (this.editForm.notes !== this.originalForm.notes) {
+        updates.notes = this.editForm.notes.trim() || undefined;
+      }
+  
+      if (this.editForm.startingOdometer !== this.originalForm.startingOdometer) {
+        updates.startingOdometer = this.editForm.startingOdometer;
+      }
+  
+      await this.tripService.updateTripDetails(this.tripId, updates);
+  
+      const toast = await this.toastCtrl.create({
+        message: 'Trip details updated successfully!',
+        duration: 2000,
+        color: 'success'
+      });
+      await toast.present();
+  
+      // Reset loading state before navigation
+      this.isSaving = false;
+  
+      // Navigate back to trip details using replaceUrl to prevent back button issues
+      this.router.navigate(['/trip-details', this.tripId], { replaceUrl: true });
+  
+    } catch (error) {
+      console.error('Error updating trip details:', error);
+      
+      const toast = await this.toastCtrl.create({
+        message: 'Error updating trip details. Please try again.',
+        duration: 3000,
+        color: 'danger'
+      });
+      await toast.present();
+      
+      // Reset loading state on error
+      this.isSaving = false;
+    }
+  }
+
+  editDepartureEvent() {
+    if (!this.trip) return;
+    this.router.navigate(['/edit-trip-event', this.tripId, 0]);
+  }
+
+  editArrivalEvent() {
+    if (!this.trip) return;
+    const lastEventIndex = this.trip.events.length - 1;
+    this.router.navigate(['/edit-trip-event', this.tripId, lastEventIndex]);
+  }
+}

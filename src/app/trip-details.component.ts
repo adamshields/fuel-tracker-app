@@ -269,19 +269,13 @@ export class TripDetailsComponent implements OnInit {
     await this.loadTripData();
   }
 
-  async ionViewWillEnter() {
-    await this.loadTripData();
-  }
-
   async loadTripData() {
     const trips = await this.tripService.getTrips();
-    const found = trips.find(t => t.id === this.tripId) || null;
-    this.trip = found ? structuredClone(found) : null;
-
+    this.trip = trips.find(t => t.id === this.tripId) || null;
+    
     if (this.trip) {
-      const boat = await this.boatService.getActiveBoat();
-      this.activeBoat = boat ? structuredClone(boat) : null;
-
+      this.activeBoat = await this.boatService.getActiveBoat();
+      
       try {
         this.fuelStats = await this.tripService.calculateTripStats(this.tripId);
       } catch (error) {
@@ -290,31 +284,37 @@ export class TripDetailsComponent implements OnInit {
     }
   }
 
-  trackByEventId(index: number, event: any): string | number {
-    return event.timestamp || index;
-  }
-
   getTripDuration(): string {
     if (!this.trip) return '';
+    
     const start = this.trip.startDate;
     const end = this.trip.endDate || new Date();
     const duration = end.getTime() - start.getTime();
+    
     const hours = Math.floor(duration / (1000 * 60 * 60));
     const minutes = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60));
+    
     return `${hours}h ${minutes}m`;
-  }
-
-  getStartingOdometer(): number {
-    return this.trip?.events?.[0]?.odometer || 0;
-  }
-
-  getEndingOdometer(): number {
-    return this.trip?.events?.[this.trip.events.length - 1]?.odometer || 0;
   }
 
   getTotalDistance(): number {
     if (!this.trip || this.trip.events.length < 2) return 0;
-    return this.getEndingOdometer() - this.getStartingOdometer();
+    
+    const firstEvent = this.trip.events[0];
+    const lastEvent = this.trip.events[this.trip.events.length - 1];
+    
+    return lastEvent.odometer - firstEvent.odometer;
+  }
+
+  getStartingOdometer(): number {
+    if (!this.trip || this.trip.events.length === 0) return 0;
+    return this.trip.events[0].odometer;
+  }
+
+  getEndingOdometer(): number {
+    if (!this.trip || this.trip.events.length === 0) return 0;
+    const lastEvent = this.trip.events[this.trip.events.length - 1];
+    return lastEvent.odometer;
   }
 
   getTotalFuelUsed(): number {
@@ -326,11 +326,13 @@ export class TripDetailsComponent implements OnInit {
   }
 
   getUsedTanks(): string[] {
-    return this.fuelStats ? Object.keys(this.fuelStats.usageByTank) : [];
+    if (!this.fuelStats) return [];
+    return Object.keys(this.fuelStats.usageByTank);
   }
 
   getTankName(tankId: string): string {
-    const tank = this.activeBoat?.tanks.find(t => t.id === tankId);
+    if (!this.activeBoat) return tankId;
+    const tank = this.activeBoat.tanks.find(t => t.id === tankId);
     return tank ? tank.name : tankId;
   }
 
@@ -374,31 +376,45 @@ export class TripDetailsComponent implements OnInit {
   }
 
   getTotalFuelAtEvent(event: any): number {
-    return Object.values(event.fuelLevels || {}).reduce((sum: number, val: any) => sum + (val || 0), 0);
+    return Object.values(event.fuelLevels).reduce((sum: number, level: any) => sum + (level || 0), 0);
   }
 
   getAllTankIds(): string[] {
-    if (!this.trip) return [];
-    const set = new Set<string>();
-    this.trip.events.forEach(e => Object.keys(e.fuelLevels || {}).forEach(t => set.add(t)));
-    return Array.from(set);
+    if (!this.trip || this.trip.events.length === 0) return [];
+    
+    const allTankIds = new Set<string>();
+    this.trip.events.forEach(event => {
+      Object.keys(event.fuelLevels).forEach(tankId => allTankIds.add(tankId));
+    });
+    
+    return Array.from(allTankIds);
   }
 
-  getSegmentDistance(index: number): number {
-    if (!this.trip || index === 0) return 0;
-    return this.trip.events[index].odometer - this.trip.events[index - 1].odometer;
+  getSegmentDistance(eventIndex: number): number {
+    if (!this.trip || eventIndex === 0) return 0;
+    
+    const currentEvent = this.trip.events[eventIndex];
+    const previousEvent = this.trip.events[eventIndex - 1];
+    
+    return currentEvent.odometer - previousEvent.odometer;
   }
 
-  getSegmentFuel(index: number): number {
-    if (!this.trip || index === 0) return 0;
-    const prevTotal = Object.values(this.trip.events[index - 1].fuelLevels || {}).reduce((sum: number, v: any) => sum + (v || 0), 0);
-    const currTotal = Object.values(this.trip.events[index].fuelLevels || {}).reduce((sum: number, v: any) => sum + (v || 0), 0);
-    return prevTotal - currTotal;
+  getSegmentFuel(eventIndex: number): number {
+    if (!this.trip || eventIndex === 0) return 0;
+    
+    const currentEvent = this.trip.events[eventIndex];
+    const previousEvent = this.trip.events[eventIndex - 1];
+    
+    const prevTotal = Object.values(previousEvent.fuelLevels).reduce((sum: number, level: any) => sum + (level || 0), 0);
+    const currentTotal = Object.values(currentEvent.fuelLevels).reduce((sum: number, level: any) => sum + (level || 0), 0);
+    
+    return prevTotal - currentTotal;
   }
 
-  getSegmentMPG(index: number): number {
-    const distance = this.getSegmentDistance(index);
-    const fuel = this.getSegmentFuel(index);
+  getSegmentMPG(eventIndex: number): number {
+    const distance = this.getSegmentDistance(eventIndex);
+    const fuel = this.getSegmentFuel(eventIndex);
+    
     return distance > 0 && fuel > 0 ? distance / fuel : 0;
   }
 
@@ -407,6 +423,7 @@ export class TripDetailsComponent implements OnInit {
   }
 
   canEditEvent(eventIndex: number): boolean {
+    // All events can be edited now, including departure (first event)
     return true;
   }
 
@@ -421,22 +438,29 @@ export class TripDetailsComponent implements OnInit {
           this.router.navigate(['/edit-trip-details', this.tripId]);
           return true;
         }
-      },
-      ...this.trip.events.map((event, index) => ({
+      }
+    ];
+
+    // Add edit buttons for each event
+    this.trip.events.forEach((event, index) => {
+      buttons.push({
         text: `Edit ${this.getEventTitle(event.type)} (${event.timestamp.toLocaleTimeString()})`,
         icon: 'create-outline',
         handler: () => {
           this.editEvent(index);
           return true;
         }
-      })),
-      {
-        text: 'Cancel',
-        icon: 'close-outline',
-        role: 'cancel',
-        handler: () => true
+      });
+    });
+
+    buttons.push({
+      text: 'Cancel',
+      icon: 'close-outline',
+      role: 'cancel',
+      handler: () => {
+        return true;
       }
-    ];
+    } as any);
 
     const actionSheet = await this.actionSheetCtrl.create({
       header: 'Edit Options',
